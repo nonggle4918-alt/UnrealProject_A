@@ -20,7 +20,7 @@
 |---|---|
 | GOAP 적 AI (플래너 + 카드 11종) | 완료, 실행 확인 |
 | 원거리/근거리 적 타입 분리 | 완료, 실행 확인 |
-| 감각: 시야·소리·피격·접촉 + 동료 알림 | 완료. 피격 → 전투 전환은 마지막 수정 후 **미검증** |
+| 감각: 시야·소리·피격·접촉 + 동료 알림 | 완료. 피격 → 전투 전환 검증됨 (등 뒤 18m에서 피격 → 약 2.7초 만에 돌진해 근접 공격) |
 | 적 HP / 사망 래그돌 | 완료, 사망 확인 |
 | NavMesh 밖(초록 밖) 플레이어 대응 | 완료, 일부 검증 |
 | 플레이어 무기 (Shooter 템플릿) + 재장전 + 재장전 모션 | 완료, 확인 |
@@ -70,14 +70,19 @@ UpdateSensors (0.2초 타이머): 사거리 안 여부(inAttackRange)만 갱신
 | Patrol | — | patrolled | 1/1 | 반경 1000 내 랜덤 지점 이동 |
 | Idle | — | patrolled | 2/2 | 2.5초 대기 |
 | Investigate | hasLastKnownPos | areaChecked | 2/2 | 마지막 위치(NavMesh로 투영)로 이동 → 1.5초 둘러봄. 6초 시간 초과 |
-| Chase | seesPlayer | inAttackRange | 2/2 | 플레이어 추적 (아래 3-6) |
-| Charge | seesPlayer | inAttackRange | 1/3 | Chase와 같고 속도 900 (끝나면 600) |
+| Chase | seesPlayer | inAttackRange | 거리별: 6m 미만 1 / 이상 3 | 플레이어 추적 (아래 3-6) |
+| Charge | seesPlayer | inAttackRange | 거리별: 6m 미만 4 / 이상 1 | Chase와 같고 속도 900 (끝나면 600) |
 | Dodge | — | safe | 1/1 | 좌/우로 튕겨 회피 |
 | TakeCover | — | atCover | 5/1 | 플레이어 반대쪽 700 근처로 이동 |
 | ShootStanding | weaponLoaded, inAttackRange | playerHurt | 1/4 | 조준 0.4초 → 시야 있으면 데미지 10, 탄 −1 |
 | ShootFromCover | atCover, weaponLoaded, inAttackRange | playerHurt | 1/1 | 위와 같음 (엄폐 상태) |
 | Reload | — | weaponLoaded | 1/1 | 1.5초 → 탄 = MaxAmmo(6) |
-| MeleeAttack | inAttackRange | playerHurt | 1/1 | 0.4초 → 거리 ≤ 사거리+80이면 데미지 20 |
+| MeleeAttack | inAttackRange | playerHurt | 1/1 | 사거리 밖이면 먼저 다가감 → 0.35초 → 거리 ≤ 사거리+80이면 데미지 20 (빗나가도 성공 처리해 바로 재계획) |
+
+- **거리별 비용**: 카드 변수 `FarDistance`(0이면 끔) / `NearCost` / `FarCost`. `AIC_Enemy.UpdateSensors`(0.2초)가 목표와의 거리로 `CostLowInt/CostHighInt`를 덮어씀. 값은 AIC 자식의 카드 컴포넌트(`Card_Charge` 등)에 설정되어 있음 — 카드 클래스 기본값을 바꿔도 이미 붙은 컴포넌트에는 반영 안 됨.
+- **사거리 판정 여유**: 이미 사거리 안이면 사거리+80까지 유지 → 공격 도중 경계에서 끊기지 않음.
+- **이동 도착 거리**: Chase/Charge는 `사거리×0.7 − 70`(최소 10)을 도착 거리로 씀. 언리얼 이동은 몸통 표면 기준이라 두 캡슐 반지름만큼 보정.
+- 검증(PIE): 18m 뒤 피격 → Charge → 약 2초 후 근접 명중 / 4m 뒤 피격 → Chase → 약 1.3초 후 근접 명중.
 
 **적 타입별 카드 구성** (AIC 자식에 컴포넌트로 붙어 있음, `InitBrain`이 자동 수집)
 
@@ -134,7 +139,7 @@ AIPerception Senses: Sight(1500/2000, 60°), Hearing(2500), Damage, Touch. 모�
 ## 5. 남은 일
 
 **검증 필요**
-- 멀리서 등 뒤로 쏘기 → 돌아서 달려오는지 / 숨으면 5초 뒤 수색하는지.
+- 쏘고 숨기 → 5초 뒤 마지막 위치를 수색하는지 (`[AIC] Hit aggro expired` 로그).
 - 근거리 적을 초록 밖으로 유인 → 초록으로 돌아와 순찰 재개하는지.
 - 조사 6초 시간 초과, Charge 속도 900→600 복귀.
 
