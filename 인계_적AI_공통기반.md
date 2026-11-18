@@ -342,6 +342,49 @@ OnEnemyDied_Event: AliveCount−1 → 0이면 WaveDelay(1.5초) 뒤 StartNextWav
 - `SkyLight_0`의 Real Time Capture 켜짐: 해가 안 움직이면 끄고 한 번만 캡처해도 됨.
 - 방향광(태양) 1개·볼류메트릭 포그 꺼짐 → 이미 가벼운 편.
 
+## 3-14. 스킬: 수류탄 던지기 (`/Game/Skill`, 11/18)
+
+> **G 키**로 수류탄을 던짐. 바닥·벽에 튕기다가 **2초 뒤 폭발**해 범위 피해를 줌. 쿨다운 5초.
+
+**흐름**
+1. `BP_ShooterCharacter`의 G 키 노드(`K2Node_InputKey_2`, Pressed) → 커스텀 이벤트 `ThrowGrenade`.
+2. `ThrowGrenade`는 먼저 쿨다운을 확인함: `GameTime >= GrenadeReadyTime`. 쿨다운 중이면 "[Grenade] Cooldown"을 출력하고 끝.
+3. 카메라 위치에서 앞으로 80만큼 떨어진 곳에 `BP_HandGrenade`를 생성함.
+   - 방향: 카메라 회전에서 위로 10° 올림.
+   - Owner: 플레이어.
+4. 생성한 수류탄의 `StartFuse`를 호출하고, `GrenadeReadyTime = 지금 + GrenadeCooldown`으로 갱신.
+5. `StartFuse`는 다음을 순서대로 함:
+   - Owner를 Instigator로 넣음.
+   - 던진 플레이어와 부딪히지 않게 함 (IgnoreActorWhenMoving).
+   - 2초 뒤 `Explode`를 호출.
+6. `Explode`는 다음을 순서대로 함:
+   - `ApplyRadialDamageWithFalloff`로 범위 피해: 기본 120, 최소 20, 안쪽 반경 150, 바깥 반경 450. 던진 사람은 제외.
+   - `NS_GrenadeBlast` 이펙트 생성.
+   - 템플릿의 `BP_Shooter_GrenadeExplosion`(커지는 구) 생성.
+   - MakeNoise(적이 소리를 들음), 자기 자신 제거.
+
+**에셋**
+| 에셋 | 내용 |
+|---|---|
+| `/Game/Skill/BP_HandGrenade` | 템플릿 유탄 `BP_ShooterProjectile_Grenade`를 복제해 만든 투사체. 이동 설정(ProjectileMovement): 속도 1400, 튕김 0.35, 마찰 0.6. 부모의 EventHit(맞으면 즉시 폭발)를 덮어써서, 맞아도 튕긴 횟수(`Bounces`)만 셈. |
+| `/Game/FX/NS_GrenadeBlast` | RadialBurst 템플릿 기반 폭발 이펙트: 주황 불꽃 80개 + 리본 꼬리 14개. |
+
+**변수** (`BP_ShooterCharacter`)
+- `GrenadeCooldown`: 기본 5초.
+- `GrenadeReadyTime`: 내부용.
+
+**조절 위치**
+- 피해·반경: `BP_HandGrenade` → `Explode` 노드의 숫자.
+- 신관 시간: `StartFuse` → Delay 2.0.
+- 던지는 힘: ProjectileMovement 컴포넌트의 InitialSpeed/MaxSpeed.
+
+**메모**
+- 적은 AnyDamage로 피해를 받으므로 범위 피해에도 그대로 반응함.
+- 피해를 준 주체(DamageCauser)가 수류탄이라 헤드샷 배율은 적용 안 됨.
+- 벽 뒤에 있는 적은 피해를 막음 (DamagePreventionChannel 기본값 Visibility).
+- MCP: 키보드 이벤트(`Input|KeyboardEvents|G`)는 DSL `event`로 못 만듦 → `create_node`로 만든 뒤 `connect_pins`.
+- MCP: SpawnActor의 Instigator 핀은 DSL에서 못 넣음.
+
 ## 3-13. 탄창·예비탄·드롭 (`/Game/Ammo`, 11/18)
 
 > 총마다 탄창 크기(장전당 발수)와 **탄 종류**가 있고, 플레이어가 종류별 **예비탄**을 들고 다님. 재장전은 예비탄을 꺼내 채움. 적이 죽으면 확률적으로 탄약·체력을 떨굼.
@@ -490,6 +533,7 @@ BP_Room.StartNextWave: 마지막 웨이브 끝 → 문 열기
 - 방 시스템: 적 처치 → 웨이브 2 → 클리어 → 문 열림 → RUN CLEAR (직접 플레이로 확인).
 - 보스: 돌진 피하기 → 약점 1.5배, 사격으로 처치, 애니메이션 배정 확인 (3-9).
 - 증강: 방 클리어 → 선택창 → 효과 반영 (3-11).
+- 수류탄: G → 튕김 → 2초 뒤 폭발·적 피해, 쿨다운 5초 (3-14). 던질 때 플레이어 몸에 걸리지 않는지.
 
 **다음 구현 후보**
 - 보스 HP 바 UI.
