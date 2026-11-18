@@ -25,6 +25,7 @@
 | NavMesh 밖(초록 밖) 플레이어 대응 | 완료, 일부 검증 |
 | 플레이어 무기 (Shooter 템플릿) + 재장전 + 재장전 모션 | 완료, 확인 |
 | 방 시스템 (트리거 → 문 잠금 → 웨이브 스폰 → 클리어 → 문 열림) | 구현 완료. 입장·스폰 검증, 처치→클리어는 미검증 (3-8) |
+| 보스 (황소 괴물, 카드 4종 + 분노 페이즈) | 구현 완료. 돌진·점프·연타·분노 PIE 확인, 돌진 빗나감·처치는 미검증 (3-9) |
 
 ---
 
@@ -174,9 +175,10 @@ OnEnemyDied_Event: AliveCount−1 → 0이면 WaveDelay(1.5초) 뒤 StartNextWav
 | 방 | 위치(중심) | 웨이브 1 | 웨이브 2 | 문 |
 |---|---|---|---|---|
 | Room_01 | (0, 1200) | 근접 2 | 원거리 1 | `Room_01_Door`(입구, Y 600) + `Door_Room01_to_Room02`(X −550, 처음엔 닫힘) |
-| Room_02 (`bFinalRoom`) | (−1300, 1200) | 근접 1 + 원거리 1 | Random 1 | `Door_Room01_to_Room02` |
+| Room_02 | (−1300, 1200) | 근접 1 + 원거리 1 | Random 1 | `Door_Room01_to_Room02` + `Door_Room02_to_Room03` |
+| Room_03_Boss (`bFinalRoom`) | (−1000, −1000) | 보스 1 | — | `Door_Room02_to_Room03` |
 
-- 방 1 클리어 → 연결 문 열림 → 방 2 입장 시 연결 문이 뒤에서 닫힘 → 방 2 클리어 → RUN CLEAR.
+- 방 1 클리어 → 연결 문 열림 → 방 2 입장 시 연결 문이 뒤에서 닫힘 → 방 2 클리어 → 보스방 문 열림 → 보스방 입장 → 보스 처치 → RUN CLEAR (3-9).
 - 벽이 없는 평지라 지금은 문이 길을 막지 못함. 실제 방 구조(벽)는 레벨 작업 필요.
 
 ### 검증 (PIE)
@@ -207,6 +209,57 @@ OnEnemyDied_Event: AliveCount−1 → 0이면 WaveDelay(1.5초) 뒤 StartNextWav
 
 ---
 
+## 3-9. 보스: 황소 괴물 (`/Game/Enemy/Boss`, 11/18)
+
+기획 근거: `보스패턴_초안.md`. **멀면 돌진, 중간이면 점프 내려찍기, 가까우면 근접 연타, HP 50%에서 분노.** 행동 순서는 직접 짜지 않았고 카드 비용과 조건만으로 나옴(GOAP).
+
+### 에셋
+
+| 에셋 | 역할 | Unity로 치면 |
+|---|---|---|
+| `BP_Enemy_Boss` | `BP_Enemy` 자식. 메시 `SK_SciFi_Beast06_Skin1`(1.5배, 키 약 3.1m), 캡슐 70/156, HP 1500, 걷기 400 | 보스 프리팹 |
+| `AIC_Enemy_Boss` | `AIC_Enemy` 자식. 목표 `enraged` > `playerHurt`, AttackRange 400. Tick에서 항상 플레이어를 대상으로 잡고 `seesPlayer`=true 유지(보스는 플레이어를 놓치지 않음) | 보스 AI 매니저 |
+| `BPC_BossAction` | 보스 카드 공용 부모(`BPC_GoapAction` 자식). 함수 `InitRefs`, `PlayIfRunning`, `TryHit`, `PushTarget`, `FlatDir`, `IsEnraged`, `CleanupBoss`, `FinishIfRunning` + 공통 중단 처리 | 보스 행동 베이스 클래스 |
+| `BPC_Boss_MeleeCombo` / `_Charge` / `_JumpSlam` / `_Rage` | 카드 4종 (아래) | 행동 스크립트 |
+
+### 카드
+
+| 카드 | 조건 | 결과 | 비용 | 동작 |
+|---|---|---|---|---|
+| Chase (기존 카드, 거리별 비용 끔) | seesPlayer | inAttackRange | 3 | 걸어서 접근 |
+| `Boss_MeleeCombo` | inAttackRange | playerHurt | 1 | 2연타(20+20, A세트 Attack1→2 / B세트 Attack3→4 무작위). 분노 후엔 3타째 Attack5(30). 끝나면 숨 고르기 Idle2 0.8초(분노 후 0.4) |
+| `Boss_Charge` | seesPlayer, **chargeReady** | playerHurt | 2 | 예고 0.6초 → 방향 고정 → 1500(분노 1800) 속도로 최대 20m 질주. 2.6m 안에 들면 명중 35 + 넉백 + Attack6. **빗나가면 Turn180 1.2초 동안 받는 피해 1.5배(약점)**. 쿨 6초(분노 4초) |
+| `Boss_JumpSlam` | seesPlayer, **jumpReady** | playerHurt | 3 | 플레이어 위치를 착지점으로 고정하고 **빨간 원(반경 4.5m, 디버그 원)** 표시 → 포물선 점프 → 착지 시 2.5m 안 45 / 4.5m 안 30 + 밀쳐냄 → 0.8초 경직. 쿨 10초(분노 7초) |
+| `Boss_Rage` | lowHealth | enraged | 1 | HP 50%에서 하던 행동을 끊고 실행. 포효 2초 동안 무적(피해 배율 0) + 5m 안 밀쳐냄 → 걷기 480. 한 번만(`rageDone`) |
+
+- **컨텍스트 조건 처리**: `chargeReady`(8~25m + 시야 + 쿨 끝), `jumpReady`(6~16m + 쿨 끝)는 각 카드의 Tick이 계산해 `SetWorldFact`로 알림. 다른 카드가 만들 수 없는 사실이라 플래너는 확인만 함(GOAP의 컨텍스트 조건).
+- **분노 판정**: `BP_Enemy_Boss` Tick이 HP ≤ 50%가 되면 `lowHealth`=true. `AIC_Enemy.CheckGoalRelevant`에 `enraged` 분기 추가(조건: lowHealth이고 rageDone이 아님). 두뇌가 목표를 달성하면 그 목표 사실을 false로 되돌리는 구조라서, 분노가 반복되지 않도록 별도 사실 `rageDone`을 둠.
+- **애니메이션**: Animation Blueprint 없이 **Single Node 모드 + `PlayAnimation`** 직접 재생(Unity의 `animation.Play()`와 같은 방식). `BP_Enemy_Boss` Tick이 속도로 Idle1/WalkF/Run을 고르고, 카드가 공격 애니를 틀 때는 `PlayBossAnim`(bActionAnim=true)으로 이동 애니를 잠시 멈춤 → 끝나면 `EndBossAnim`. 루트 모션 없음.
+- 카드의 애니메이션은 카드 변수(`AnimA1`, `AnimRun` 등)라서 `AIC_Enemy_Boss` 디테일 패널에서 바꿀 수 있음.
+- **공통 적 수정**: `BP_Enemy`에 `DamageMult`(피해 배율, 기본 1) 추가. AnyDamage가 `Damage × DamageMult`로 깎음. 기존 근거리·원거리 적은 1이라 변화 없음.
+- 로그: `[Boss] Charge... / HIT 35 / Charge missed! WEAK POINT x1.5 / JUMP SLAM! / SLAM dist N / *** RAGE ***`, `[AIC] Goal/Action`(bDebugLog 켜 둠).
+
+### 레벨 배치
+
+- **방 시스템에 연결됨**: 보스방 `Room_03_Boss`(`BP_Room_C_2`, 중심 (−1000, −1000), `bFinalRoom`)에 스폰 포인트 `SpawnPoint_Boss`(`EnemyType`=`Boss`, Wave 1, (−1000, −1250)). 들어가면 문 닫힘 → 보스 스폰 → 처치하면 클리어 → RUN CLEAR.
+- `Room_02`는 `bFinalRoom` 해제, 문 목록에 `Door_Room02_to_Room03`(`BP_RoomDoor_C_2`, (−1150, 100), 처음엔 닫힘) 추가 → Room_02 클리어 시 열림, Room_03 입장 시 닫힘.
+- `BP_EnemySpawnPoint.SpawnEnemy`에 `"Boss"` 분기 추가(`BP_Enemy_Boss` 스폰).
+- 앞서 테스트용으로 놓았던 보스(`Boss_Test` 폴더)는 삭제함.
+- 검증(PIE): Room_03 입장 → `[Room] Start: Room_03_Boss` → 문 닫힘 → Wave 1 → 보스 스폰·두뇌 연결 → 1초 안에 점프 내려찍기 명중. ⬜ 보스 처치 → RUN CLEAR는 직접 플레이로 확인 필요.
+
+### 검증 (PIE)
+
+- ✅ 시작 19m → 돌진 → 명중 35 → 추적 → 근접 연타 20+20 반복
+- ✅ 7m에서 시작 → 점프 내려찍기 → 착지 1.2m → 45
+- ✅ HP 50% → 연타 중단 → 분노 1회 → 이후 연타 3타째 30
+- ⬜ 미검증: 돌진 빗나감 → 약점(1.5배), 실제 사격으로 HP 깎기·사망·방 클리어 연결, 애니메이션이 자연스러운지(Attack1~6 배정은 임시)
+
+### 작업 중 사고
+
+- `BlueprintTools.set_parent`(부모 변경)로 **에디터 크래시** → 저장 안 한 보스 작업이 사라져 다시 만듦. 이후 카드는 처음부터 `BPC_BossAction` 부모로 생성, 단계마다 저장.
+
+---
+
 ## 4. 플레이어 무기 (`/Game/Variant_Shooter`)
 
 - UE 템플릿 `Variant_Shooter`를 복사해 사용. GameMode(`/Game/Nomal/FirstPerson/Blueprints/BP_FirstPersonGameMode`)의 Pawn = `BP_ShooterCharacter`, Controller = `BP_ShooterPlayerController`.
@@ -220,7 +273,17 @@ OnEnemyDied_Event: AliveCount−1 → 0이면 WaveDelay(1.5초) 뒤 StartNextWav
   - 문제: 바짝 붙어 쏘면 총구(+10cm)가 적 캡슐 안에 들어가 투사체가 적 몸 안에서 생성됨 → 언리얼은 처음부터 겹친 물체를 Hit로 처리하지 않음 + 조준점이 총구 뒤쪽이라 총알이 플레이어 쪽으로 날아감 → 피해 없음.
   - 조치: 생성 전에 **눈 위치(GetActorEyesViewPoint) → 원래 생성 위치까지 반지름 16cm(총알 크기) 구체 트레이스**(WorldStatic·WorldDynamic·Pawn·PhysicsBody, 소유자 무시). 걸리면 총알을 **눈 위치에서 조준점 방향으로** 생성(`SelectTransform`), 안 걸리면 기존대로 총구에서 생성. 벽에 총구가 파묻힌 경우도 같이 해결됨.
   - 기존 노드는 지우지 않고 추가만 함. 권총·라이플·유탄발사기 공통(부모 BP). NPC도 같은 무기를 쓰면 같이 적용됨.
-  - 검증: 컴파일·저장만. 실제 근접 명중은 직접 플레이로 확인 필요.
+  - **버그 수정(11/18 같은 날)**: 방 안에서 총알이 몸(눈)에서 나가고 피해가 안 들어감.
+    - 원인 1: 오브젝트 트레이스는 막힘/겹침을 구분하지 않아 **겹침 전용 방 트리거(EntryTrigger)도 걸림**. 트리거 박스 안에 서 있으면 매 발 "걸림" → 매번 눈에서 생성.
+    - 원인 2(추정): 눈에서 나간 총알이 **자기 무기 메시**에 부딪힘(총알은 Instigator만 무시하고 무기 액터는 안 무시).
+    - 조치: 트레이스 대상을 **Pawn(ObjectTypeQuery3)만**으로 축소 + SpawnActor 직후 `총알.CollisionComponent.IgnoreActorWhenMoving(무기 self)`.
+    - 대가: 벽에 총구를 대고 쏠 때의 보정은 빠짐(템플릿 원래 동작). 적 몸에 총구가 파묻힐 때만 보정.
+  - 검증: 컴파일·저장만. 방 안 사격 / 근접 명중은 직접 플레이로 확인 필요.
+  - **버그 수정 2(11/18)**: 특정 위치에서 총알이 총구 앞에서 계속 막힘.
+    - 원인: `BP_Room.EntryTrigger`의 충돌 프로필이 `OverlapAllDynamic`이었음. 이 프로필에는 커스텀 오브젝트 채널 `Projectile` 항목이 없어 채널 기본값(**Block**)이 적용됨 → 트리거 박스 경계에서 총알이 막힘.
+    - 조치: EntryTrigger 프로필을 `Trigger`(Projectile = Ignore로 설정돼 있음)로 변경. BP 기본값 + 레벨에 놓인 Room_01/02 인스턴스(인스턴스 값이 따로 남아 있었음) 모두 바꾸고 저장.
+    - 주의: 앞으로 겹침용 박스를 만들 때는 `Trigger` 프로필을 쓸 것. `OverlapAll*` 계열은 Projectile을 막음.
+  - MCP 메모: 오브젝트 타입 트레이스(`...ForObjects`)는 겹침 전용 트리거도 맞춤. BP 컴포넌트 기본값을 바꿔도 레벨 인스턴스에 이미 저장된 값은 안 바뀔 수 있음 → 인스턴스도 확인. `Projectile`은 오브젝트 채널이라 채널 트레이스로는 못 씀.
 - `IA_Reload` 에셋은 만들어 뒀지만 미사용. 에디터 재시작 후 Enhanced Input 방식으로 바꿀 수 있음(현재 IMC_Weapons에는 R 매핑 없음).
 
 ---
@@ -232,8 +295,10 @@ OnEnemyDied_Event: AliveCount−1 → 0이면 WaveDelay(1.5초) 뒤 StartNextWav
 - 근거리 적을 초록 밖으로 유인 → 초록으로 돌아와 순찰 재개하는지.
 - 조사 6초 시간 초과, Charge 속도 900→600 복귀.
 - 방 시스템: 적 처치 → 웨이브 2 → 클리어 → 문 열림 → RUN CLEAR (직접 플레이로 확인).
+- 보스: 돌진 피하기 → 약점 1.5배, 사격으로 처치, 애니메이션 배정 확인 (3-9).
 
 **다음 구현 후보**
+- 보스 HP 바 UI.
 - 플레이어 사망 → 재시작 (지금은 템플릿 리스폰으로 PlayerStart에서 부활함. 로그라이크라면 "레벨 재시작"으로 바꿀지 결정 필요, 3-8 참고).
 - 방 구조: 벽으로 방을 막아 문이 실제로 길을 막게 하기, 방 개수 늘리기.
 - 레벨: 경사로 2층 구조, NavMesh 범위 정리.
