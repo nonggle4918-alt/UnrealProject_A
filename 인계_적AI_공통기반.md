@@ -1,6 +1,6 @@
-# 인계: 적 AI (GOAP) + 플레이어 무기
+# 인계: 적 AI (GOAP) + 플레이어 무기 + 방 시스템
 
-최종 갱신: 2026-11-17 / 다음 세션은 이 문서부터 읽고 시작
+최종 갱신: 2026-11-18 / 다음 세션은 이 문서부터 읽고 시작
 
 ---
 
@@ -24,6 +24,7 @@
 | 적 HP / 사망 래그돌 | 완료, 사망 확인 |
 | NavMesh 밖(초록 밖) 플레이어 대응 | 완료, 일부 검증 |
 | 플레이어 무기 (Shooter 템플릿) + 재장전 + 재장전 모션 | 완료, 확인 |
+| 방 시스템 (트리거 → 문 잠금 → 웨이브 스폰 → 클리어 → 문 열림) | 구현 완료. 입장·스폰 검증, 처치→클리어는 미검증 (3-8) |
 
 ---
 
@@ -74,7 +75,7 @@ UpdateSensors (0.2초 타이머): 사거리 안 여부(inAttackRange)만 갱신
 | Charge | seesPlayer | inAttackRange | 거리별: 6m 미만 4 / 이상 1 | Chase와 같고 속도 900 (끝나면 600) |
 | Dodge | — | safe | 1/1 | 좌/우로 튕겨 회피 |
 | TakeCover | — | atCover | 5/1 | 플레이어 반대쪽 700 근처로 이동 |
-| ShootStanding | weaponLoaded, inAttackRange | playerHurt | 1/4 | 조준 0.4초 → 시야 있으면 데미지 10, 탄 −1 |
+| ShootStanding | weaponLoaded, inAttackRange | playerHurt | 1/4 | **노출 판정 → 필요하면 옆걸음** → 조준 0.4초 → 시야 있으면 데미지 10, 탄 −1 (아래 3-4-1) |
 | ShootFromCover | atCover, weaponLoaded, inAttackRange | playerHurt | 1/1 | 위와 같음 (엄폐 상태) |
 | Reload | — | weaponLoaded | 1/1 | 1.5초 → 탄 = MaxAmmo(6) |
 | MeleeAttack | inAttackRange | playerHurt | 1/1 | 사거리 밖이면 먼저 다가감 → 0.35초 → 거리 ≤ 사거리+80이면 데미지 20 (빗나가도 성공 처리해 바로 재계획) |
@@ -83,6 +84,19 @@ UpdateSensors (0.2초 타이머): 사거리 안 여부(inAttackRange)만 갱신
 - **사거리 판정 여유**: 이미 사거리 안이면 사거리+80까지 유지 → 공격 도중 경계에서 끊기지 않음.
 - **이동 도착 거리**: Chase/Charge는 `사거리×0.7 − 70`(최소 10)을 도착 거리로 씀. 언리얼 이동은 몸통 표면 기준이라 두 캡슐 반지름만큼 보정.
 - 검증(PIE): 18m 뒤 피격 → Charge → 약 2초 후 근접 명중 / 4m 뒤 피격 → Chase → 약 1.3초 후 근접 명중.
+
+#### 3-4-1. ShootStanding 노출 사격 (11/18)
+
+- 목적: 서서 사격은 몸이 반만 보이면 엄폐 사격처럼 보임 → **몸을 최대한 노출시킨 뒤** 쏘게 함.
+- 노출도(0~9): 플레이어 눈(액터 위치 +64) → 적 몸 9점(높이 +60/+5/−50 × 좌우 −30/0/+30, 플레이어 기준 좌우) 라인 트레이스(Visibility, 플레이어·자기 자신 무시). 안 막힌 점 개수.
+- 자리 후보: 현재 자리 + 좌우 ±1m·±2m·±3m(NavMesh로 투영, 높이는 현재와 같게). 가장 노출도가 높은 곳 선택, 동점이면 가까운 쪽(현재 자리 우선).
+- 현재보다 나은 자리가 있으면 `AI MoveTo`(허용 반경 20)로 옆걸음 → 도착(또는 실패) 후 `DoShoot`. 플레이어를 계속 바라봄(SetFocus). 9/9가 안 되면 가능한 최대치 자리에서 쏨.
+- `DoShoot`: 기존 사격 로직(조준 0.4초 → LineOfSightTo면 데미지 → 탄 −1 → 0.5초 → FinishAction(true)). 자기 이벤트 호출은 `SetTimerbyFunctionName`.
+- 로그: `[Enemy] expose 현재/9 -> best 최고`.
+- 카드 변수(내부): `ExpCount`, `BestScore`, `CurScore`, `BestLoc`, `Cand`.
+- 검증(PIE): 벽 모서리 뒤 반 가림 → `expose 6/9 -> best 9` → 옆걸음 후 0.7초 만에 명중, 이후 새 자리에서 9/9로 연속 사격. 완전 노출 시엔 이동 없이 바로 사격.
+- 한계: 좌우로만 찾음(앞뒤·대각선은 안 봄). 3m 안에 노출되는 자리가 없으면 현재 자리에서 쏨. 노출 계산은 발사 때마다 트레이스 63번(가벼움).
+- MCP 메모: DSL `MakeArray`는 값 1개만 받음 → 여러 값은 `(for i (range 0 N))` + 계산식으로. `%`(Modulo) 노드 없음. 출력이 여러 개인 노드(LineTrace, ProjectPointtoNavigation)는 `(bind (a b) ...)`로 받아야 함(그냥 쓰면 첫 출력 OutHit에 연결됨). `(CallFunction|FinishAction true)`처럼 위치 인자로 쓰면 값이 false로 들어감 → 작성 후 `set_pin_value`로 고치거나 `:bSuccess true`.
 
 **적 타입별 카드 구성** (AIC 자식에 컴포넌트로 붙어 있음, `InitBrain`이 자동 수집)
 
@@ -120,6 +134,76 @@ AIPerception Senses: Sight(1500/2000, 60°), Hearing(2500), Damage, Touch. 모�
 
 - `MaxHealth` 100(인스턴스 편집 가능, 배치된 인스턴스에도 값 설정 필요). 0 이하 → `Die` → 두뇌 정지 → 래그돌 → 5초 후 삭제.
 - `Use Controller Rotation Yaw` = on (시선 방향으로 즉시 회전). MaxWalkSpeed 600.
+- **이벤트 디스패처 `OnEnemyDied(DeadEnemy: BP_Enemy)`** (11/18 추가): `Die`에서 `bDead`=true → 로그 → **호출** → 두뇌 정지/래그돌 순. 방 시스템이 스폰한 적에 바인딩해서 남은 적 수를 셈. (Unity의 `event Action<Enemy> OnDied`)
+- `Auto Possess AI` = Placed in World or Spawned (부모·Ranged·Melee 모두 확인됨) → 런타임 스폰된 적도 두뇌가 자동으로 붙음.
+
+---
+
+## 3-8. 방 시스템 (`/Game/Room`, 11/18)
+
+브랜치 `feat/room-system` (아직 커밋 없음). 결정: 방들을 한 레벨에 이어 붙이고 문으로 연결, **스폰은 미리 찍은 포인트에 고정 스폰**(NavMesh 범위 랜덤 아님).
+
+### 흐름
+
+```
+대기 ─플레이어가 EntryTrigger에 들어옴─▶ 전투 시작
+  문 전부 CloseDoor → MaxWave = 스폰 포인트 Wave 최댓값 → 0.5초 뒤 StartNextWave
+StartNextWave: CurrentWave+1
+  CurrentWave > MaxWave → 클리어: bCleared, 문 전부 OpenDoor, bFinalRoom이면 "RUN CLEAR!"
+  아니면: Wave가 같은 포인트마다 SpawnEnemy → LastSpawned의 OnEnemyDied에 바인딩 → AliveCount+1
+          (이 웨이브에 포인트가 없으면 바로 다음 웨이브)
+OnEnemyDied_Event: AliveCount−1 → 0이면 WaveDelay(1.5초) 뒤 StartNextWave
+```
+
+### 에셋
+
+| 에셋 | 역할 | 레벨에서 바꾸는 값 | Unity로 치면 |
+|---|---|---|---|
+| `BP_Room` | 방 관리자. `EntryTrigger`(Box 500×500×200) | `RoomName`, `SpawnPoints`(배열), `Doors`(배열), `WaveDelay`(1.5), `bFinalRoom` | RoomManager 스크립트 + 트리거 콜라이더 |
+| `BP_EnemySpawnPoint` | 고정 스폰 위치. 빨간 화살표 = 적이 바라볼 방향 | `EnemyType`(`Ranged`/`Melee`/`Random`, 오타면 Melee), `Wave`(1부터) | 스폰 포인트 빈 GameObject |
+| `BP_RoomDoor` | 문. 큐브 30cm×4m×3m, 열리면 바닥 아래로 내려감 | `OpenOffset`(0,0,−310), `MoveTime`(0.5), `bStartOpen`(true) | Lerp 코루틴 문 |
+| `BP_Enemy` (수정) | 디스패처 `OnEnemyDied(DeadEnemy)` 추가 (3-7) | — | `event Action<Enemy>` |
+
+- 로그: `[Room] Start / Wave N / Enemy down, left: N / CLEAR / *** RUN CLEAR! ***`, `[Door] Open/Close`.
+- 스폰: 포인트 위치 +1m, `AdjustIfPossibleButAlwaysSpawn`. `Auto Possess AI`가 이미 Spawned 포함이라 AI 자동 연결됨.
+- 문은 `MoveComponentTo` 사용(Timeline 대신, 커브 에셋 불필요).
+- 적 종류를 이름(Name)으로 고르는 이유: MCP로 클래스 참조 변수를 만들 수 없음. 새 적 타입 추가 시 `BP_EnemySpawnPoint.SpawnEnemy`의 분기에 추가해야 함.
+
+### MainLevel 테스트 배치 (아웃라이너 폴더 `Room_Test`)
+
+| 방 | 위치(중심) | 웨이브 1 | 웨이브 2 | 문 |
+|---|---|---|---|---|
+| Room_01 | (0, 1200) | 근접 2 | 원거리 1 | `Room_01_Door`(입구, Y 600) + `Door_Room01_to_Room02`(X −550, 처음엔 닫힘) |
+| Room_02 (`bFinalRoom`) | (−1300, 1200) | 근접 1 + 원거리 1 | Random 1 | `Door_Room01_to_Room02` |
+
+- 방 1 클리어 → 연결 문 열림 → 방 2 입장 시 연결 문이 뒤에서 닫힘 → 방 2 클리어 → RUN CLEAR.
+- 벽이 없는 평지라 지금은 문이 길을 막지 못함. 실제 방 구조(벽)는 레벨 작업 필요.
+
+### 검증 (PIE)
+
+- ✅ 방 1: 입장 → 문 닫힘 → 웨이브 1 근접 2마리 스폰·AI 연결 → 약 1.4초 뒤 공격 시작
+- ✅ 방 2: 입장 → 연결 문 닫힘 → 웨이브 1 근접 1 + 원거리 1 스폰·AI 연결
+- ⬜ 미검증: 적 처치 → 남은 수 감소 → 웨이브 2 → 클리어 → 문 열림 → RUN CLEAR (MCP로 사격 입력을 못 넣음 → 직접 플레이로 확인 필요)
+- 주의: 플레이어가 **처음부터 트리거 안에서 시작하면 입장으로 감지되지 않음**(언리얼은 시작 시 겹침을 Begin Overlap으로 안 보냄). 실제로 걸어 들어가면 정상.
+
+### 발견한 문제: 플레이어 사망 시 리스폰 오류 (태그 추가로 해결)
+
+- 테스트 중 플레이어가 죽자 `Accessed None ... CallFunc_Array_Random_OutItem` 오류.
+- 원인: 템플릿 `BP_ShooterPlayerController.OnDestroyed_Event`가 태그 `BLUE`(TeamByte에 따라 `RED`)가 붙은 PlayerStart를 찾아 리스폰하는데, MainLevel의 PlayerStart에 태그가 없음 → 빈 배열 → 리스폰 실패.
+- 조치(11/18): MainLevel `PlayerStart`에 태그 `BLUE`, `RED` 둘 다 추가하고 레벨 저장. (`Team Byte` 기본값 0이 어느 태그를 고르는지 그래프만으론 불확실해서 둘 다 붙임)
+- ✅ 확인(11/18, 사용자 직접 플레이): 사망 후 PlayerStart에서 다시 살아남.
+- 나중에 "사망 → 레벨 재시작"을 만들면 이 템플릿 리스폰 이벤트를 교체할 수 있음.
+
+### MCP 작업 메모 (방 시스템에서 새로 알게 된 것)
+
+- `read_graph_dsl` 출력을 그대로 `write_graph_dsl`에 넣으면 실패할 수 있음(예: `|SetbDead`). 기존 흐름 중간에 노드를 끼울 땐 `create_node` + `break_pins`/`connect_pins`.
+- 컴포넌트: `ActorTools.add_component`(owner = BP 에셋). 컴포넌트 기본값은 `<BP>_C:<이름>_GEN_VARIABLE`에 `set_properties`. 컴포넌트 이벤트는 `add_component_bound_event` → DSL 이름은 `OnComponentBeginOverlap(EntryTrigger)`.
+- 디스패처 바인딩: `create_node`로 `Default|Assign<디스패처명>`을 만들면 바인드 노드 + 맞는 시그니처의 커스텀 이벤트가 함께 생김. 그 이벤트 본문은 DSL로 다시 써도 연결이 유지됐음.
+- 클래스 참조 변수는 만들 수 없음(`add_object_variable`은 오브젝트 참조만, Blueprint의 NewVariables도 읽기 불가).
+- 새 커스텀 이벤트가 `find_node_types`에 일부만 잡힘 → 자기 BP 이벤트끼리 호출할 땐 `SetTimerbyFunctionName`(함수 이름 문자열)로 우회. 이 방식이 안정적.
+- `for` 뒤에 이어 쓴 문장은 ForEach의 Completed에 연결됨(확인됨).
+- PIE: `StartPIE`는 "PIE ended before warmup completed" 오류를 내도 실제로는 실행 중인 경우가 있음 → `IsPIERunning`으로 확인. PIE 중 액터는 `/Game/Level/UEDPIE_0_MainLevel.MainLevel:PersistentLevel.<이름>` 경로로 `ActorTools`(위치 이동 등) 사용 가능. 콘솔 명령·함수 호출 도구는 없음.
+- 여러 호출을 묶을 땐 `ProgrammaticToolset.execute_tool_script`(Python 샌드박스, `execute_tool(name, json)`)가 편함.
 
 ---
 
@@ -132,6 +216,11 @@ AIPerception Senses: Sight(1500/2000, 60°), Hearing(2500), Damage, Touch. 모�
   - `BP_ShooterCharacter`: 키보드 **R** → 현재 무기 `Reload`. `PlayReloadAnim` 이벤트로 1인칭 팔의 "Arms" 슬롯에 재장전 애니 재생(재장전 시간에 맞춰 배속).
   - 재장전 시간: 라이플 1.5 / 권총 1.2 / 유탄발사기 2.0 (각 무기 Class Defaults `ReloadTime`).
   - 애니: 라이플·유탄 `MM_Rifle_Reload`, 권총 `MM_Pistol_Reload` (`/Game/Characters/Mannequins/Anims/`).
+- **근접 사격 보정** (11/18, `BP_ShooterWeaponBase` → `FireBullet`):
+  - 문제: 바짝 붙어 쏘면 총구(+10cm)가 적 캡슐 안에 들어가 투사체가 적 몸 안에서 생성됨 → 언리얼은 처음부터 겹친 물체를 Hit로 처리하지 않음 + 조준점이 총구 뒤쪽이라 총알이 플레이어 쪽으로 날아감 → 피해 없음.
+  - 조치: 생성 전에 **눈 위치(GetActorEyesViewPoint) → 원래 생성 위치까지 반지름 16cm(총알 크기) 구체 트레이스**(WorldStatic·WorldDynamic·Pawn·PhysicsBody, 소유자 무시). 걸리면 총알을 **눈 위치에서 조준점 방향으로** 생성(`SelectTransform`), 안 걸리면 기존대로 총구에서 생성. 벽에 총구가 파묻힌 경우도 같이 해결됨.
+  - 기존 노드는 지우지 않고 추가만 함. 권총·라이플·유탄발사기 공통(부모 BP). NPC도 같은 무기를 쓰면 같이 적용됨.
+  - 검증: 컴파일·저장만. 실제 근접 명중은 직접 플레이로 확인 필요.
 - `IA_Reload` 에셋은 만들어 뒀지만 미사용. 에디터 재시작 후 Enhanced Input 방식으로 바꿀 수 있음(현재 IMC_Weapons에는 R 매핑 없음).
 
 ---
@@ -142,9 +231,11 @@ AIPerception Senses: Sight(1500/2000, 60°), Hearing(2500), Damage, Touch. 모�
 - 쏘고 숨기 → 5초 뒤 마지막 위치를 수색하는지 (`[AIC] Hit aggro expired` 로그).
 - 근거리 적을 초록 밖으로 유인 → 초록으로 돌아와 순찰 재개하는지.
 - 조사 6초 시간 초과, Charge 속도 900→600 복귀.
+- 방 시스템: 적 처치 → 웨이브 2 → 클리어 → 문 열림 → RUN CLEAR (직접 플레이로 확인).
 
-**다음 구현 후보 (11/18)**
-- 로그라이크 뼈대: 적 스포너 → 방 클리어 → 다음 방 / 플레이어 사망 → 재시작.
+**다음 구현 후보**
+- 플레이어 사망 → 재시작 (지금은 템플릿 리스폰으로 PlayerStart에서 부활함. 로그라이크라면 "레벨 재시작"으로 바꿀지 결정 필요, 3-8 참고).
+- 방 구조: 벽으로 방을 막아 문이 실제로 길을 막게 하기, 방 개수 늘리기.
 - 레벨: 경사로 2층 구조, NavMesh 범위 정리.
 
 **선택(연출)**
