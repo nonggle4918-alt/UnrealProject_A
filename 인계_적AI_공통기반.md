@@ -27,6 +27,34 @@
 | 방 시스템 (트리거 → 문 잠금 → 웨이브 스폰 → 클리어 → 문 열림) | 구현 완료. 입장·스폰 검증, 처치→클리어는 미검증 (3-8) |
 | 보스 (황소 괴물, 카드 4종 + 분노 페이즈) | 구현 완료. 돌진·점프·연타·분노 PIE 확인, 돌진 빗나감·처치는 미검증 (3-9) |
 
+### 2-1. 폴더 정리 (11/18, 백업 커밋 `dc0ceed` 이후)
+
+> 템플릿 폴더(`Variant_Shooter`, `FirstPerson`, `Nomal`, `Characters`, `LevelPrototyping`)에서 **MainLevel이 실제로 쓰는 에셋 152개**를 분류별 폴더로 옮김.
+> **이 문서의 다른 절에 나오는 옛 경로는 아래 표대로 바뀐 것으로 읽을 것.**
+
+| 새 위치 | 내용 | 옛 위치 |
+|---|---|---|
+| `/Game/Core` | `BP_GameMode`(기본 GameMode, 복사본), `BP_ShooterPlayerController`, `BP_FirstPersonCharacter`(플레이어 부모), `BP_FirstPersonCameraManager`, `BP_FirstPersonPlayerController`, `BPI_Shooter`, `BPI_Teammate` | `Variant_Shooter/Blueprints`, `FirstPerson/Blueprints`, `Nomal/FirstPerson/Blueprints` |
+| `/Game/Player` | `BP_ShooterCharacter`, `MI_FirstPersonColorway` | `Variant_Shooter/Blueprints`, `FirstPerson` |
+| `/Game/Player/Anims` | 1인칭·3인칭 애님 BP, 손 보정 리그, 사격 몽타주, `ABP_FP_Copy`, `CtrlRig_FPWarp` | `Variant_Shooter/Anims`, `FirstPerson/Anims` |
+| `/Game/Player/Mannequin` | 플레이어 쪽 마네킹(메시·애님·리그·텍스처) | `Characters/Mannequins` |
+| `/Game/Enemy/Mannequin` | 적(`BP_Enemy`) 몸체 마네킹 | `Nomal/Characters/Mannequins` |
+| `/Game/Weapons/Blueprints` | `BP_ShooterWeaponBase`, 총 3종, `BP_ShooterPickup`, `DT_WeaponList`, `ST_WeaponTableRow`, `BPI_Pickups`, `BPI_WeaponHolder` | `Variant_Shooter/Blueprints/Pickups(/Weapons)` |
+| `/Game/Weapons/Projectiles` | 총알·유탄·폭발 BP, `M_Explosion`, `SM_FoamBullet` | `Variant_Shooter/Blueprints/Pickups/Projectiles` |
+| `/Game/Input` | 기존 IA·IMC + `IA_Shoot`, `IA_SwapWeapon`, `IMC_Weapons`, `Touch/`(터치 UI·인터페이스) | `Variant_Shooter/Input` |
+| `/Game/UI` | `UI_ShooterBulletCounter`(HUD), `M_BulletCounter`, `M_CooldownRadial`, `WBP_SkillHUD`(사용자 작업 중) | `Variant_Shooter/UI` |
+| `/Game/Level` | MainLevel + `Materials/Meshes/Textures`(그리드 바닥 등) | `LevelPrototyping` |
+
+- **설정 파일**: `Config/DefaultEngine.ini`의 `GlobalDefaultGameMode`를 `/Game/Core/BP_GameMode`로 바꿈. 에디터를 재시작해야 적용됨.
+  - 원래 GameMode(`Nomal/.../BP_FirstPersonGameMode`)는 ini가 참조하고 있어서 이동이 거부됨. 그래서 복사본을 만들고 ini를 바꿨음.
+- **남은 정리 (사용자가 에디터에서)**
+  - Content 폴더 우클릭 → **Fix Up Redirectors**.
+  - 리다이렉터 5개가 남아 있음: MainLevel이 쓰는 무기 픽업 2개, 템플릿 레벨이 쓰는 3개. MainLevel은 에디터에서 변경 표시가 안 떠서 자동 저장되지 않았음.
+- **템플릿 폴더 삭제 시**
+  - `Variant_Shooter`, `FirstPerson`, `Nomal`, `Characters`, `LevelPrototyping`에는 이제 안 쓰는 것만 남음 (Fix Up Redirectors 후).
+  - MainLevel 안에 `/Game/FirstPerson/Lvl_FirstPerson` 문자열 참조가 남아 있음. MainLevel이 템플릿 레벨을 복제해서 만든 흔적으로 보임. 삭제할 때 참조 경고 창에 이 이름이 뜨는지 확인할 것.
+  - `Input`, `Weapons` 폴더에는 원래 템플릿 에셋 중 안 쓰는 것도 섞여 있음.
+
 ---
 
 ## 3. 적 AI 구조 (`/Game/Enemy`)
