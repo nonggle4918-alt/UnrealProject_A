@@ -137,6 +137,12 @@ AIPerception Senses: Sight(1500/2000, 60°), Hearing(2500), Damage, Touch. 모�
 - `Use Controller Rotation Yaw` = on (시선 방향으로 즉시 회전). MaxWalkSpeed 600.
 - **이벤트 디스패처 `OnEnemyDied(DeadEnemy: BP_Enemy)`** (11/18 추가): `Die`에서 `bDead`=true → 로그 → **호출** → 두뇌 정지/래그돌 순. 방 시스템이 스폰한 적에 바인딩해서 남은 적 수를 셈. (Unity의 `event Action<Enemy> OnDied`)
 - `Auto Possess AI` = Placed in World or Spawned (부모·Ranged·Melee 모두 확인됨) → 런타임 스폰된 적도 두뇌가 자동으로 붙음.
+- **머리 위 체력바** (11/18): 위젯 `Content/Enemy/UI/WBP_EnemyHP`(루트 = ProgressBar `HPBar`, 빨강) + `BP_Enemy`의 Widget 컴포넌트 `HPWidget`(Screen 공간 → 항상 화면을 향함, 충돌 없음). Unity의 World Space Canvas + Slider에 해당.
+  - BeginPlay에서 캡슐 높이에 맞춰 위치(캡슐 반높이 + 35)와 크기 결정: 일반 적 120×12, 큰 적(반높이 > 120, 보스) 220×18. 자식마다 따로 설정할 필요 없음.
+  - 함수 `UpdateHPBar`: Percent = Health / MaxHealth. BeginPlay와 AnyDamage(체력 감소 직후)에서 호출.
+  - **시야 체크** `UpdateHPVisible` (0.1초 반복 타이머, BeginPlay에서 시작): 플레이어 카메라 → 적 몸 중심, 카메라 → 체력바 위치로 라인 트레이스 2번(Visibility, 플레이어·자기 자신 무시). **둘 다 막히면 숨김**, 하나라도 보이면 표시, HP 0이면 숨김. 이유: Screen 공간 위젯은 벽 뒤에서도 그려지기 때문. 시작 시엔 숨김 상태.
+  - 같이 정리: 크래시 복구 중 생긴 중복 변수 `DamageMult_0` 삭제.
+  - 검증(PIE): 보스 스폰 시 체력바 220×18, 머리 위 191cm, 시야 트인 상태에서 보임(시야 체크 후에도), 런타임 오류 없음. 벽 뒤 숨김은 직접 확인 필요(테스트 맵에 키 큰 벽이 없음). 실제 화면 모양·피격 시 줄어드는 것은 직접 플레이로 확인 필요.
 
 ---
 
@@ -245,7 +251,7 @@ OnEnemyDied_Event: AliveCount−1 → 0이면 WaveDelay(1.5초) 뒤 StartNextWav
 - `Room_02`는 `bFinalRoom` 해제, 문 목록에 `Door_Room02_to_Room03`(`BP_RoomDoor_C_2`, (−1150, 100), 처음엔 닫힘) 추가 → Room_02 클리어 시 열림, Room_03 입장 시 닫힘.
 - `BP_EnemySpawnPoint.SpawnEnemy`에 `"Boss"` 분기 추가(`BP_Enemy_Boss` 스폰).
 - 앞서 테스트용으로 놓았던 보스(`Boss_Test` 폴더)는 삭제함.
-- 검증(PIE): Room_03 입장 → `[Room] Start: Room_03_Boss` → 문 닫힘 → Wave 1 → 보스 스폰·두뇌 연결 → 1초 안에 점프 내려찍기 명중. ⬜ 보스 처치 → RUN CLEAR는 직접 플레이로 확인 필요.
+- 검증(PIE): Room_03 입장 → `[Room] Start: Room_03_Boss` → 문 닫힘 → Wave 1 → 보스 스폰·두뇌 연결 → 1초 안에 점프 내려찍기 명중. ✅ 사용자 플레이(로그): 보스 처치 → `Enemy down, left: 0` → `CLEAR: Room_03_Boss` → `*** RUN CLEAR! ***`, 처치 중 분노 1회·돌진·점프도 정상.
 
 ### 검증 (PIE)
 
@@ -283,6 +289,11 @@ OnEnemyDied_Event: AliveCount−1 → 0이면 WaveDelay(1.5초) 뒤 StartNextWav
     - 원인: `BP_Room.EntryTrigger`의 충돌 프로필이 `OverlapAllDynamic`이었음. 이 프로필에는 커스텀 오브젝트 채널 `Projectile` 항목이 없어 채널 기본값(**Block**)이 적용됨 → 트리거 박스 경계에서 총알이 막힘.
     - 조치: EntryTrigger 프로필을 `Trigger`(Projectile = Ignore로 설정돼 있음)로 변경. BP 기본값 + 레벨에 놓인 Room_01/02 인스턴스(인스턴스 값이 따로 남아 있었음) 모두 바꾸고 저장.
     - 주의: 앞으로 겹침용 박스를 만들 때는 `Trigger` 프로필을 쓸 것. `OverlapAll*` 계열은 Projectile을 막음.
+  - **버그 수정 3(11/18, 보스)**: 큰 보스에 바짝 붙어 쏘면 총알이 몸 앞에서 튕기고 피해가 안 들어감.
+    - 원인: 보스 메시(1.5배, 팔·칼날)가 커서 총구는 물론 **눈 위치까지 몸 안**에 들어감 → 보정으로 눈에서 생성해도 처음부터 겹친 상태라 Hit가 안 남.
+    - 조치: 함수 `NearHitDamage(Proj, bHit, Hit)` 추가, `FireBullet`의 `IgnoreActorWhenMoving` 뒤에 연결. 근접 트레이스가 적(Pawn)에 걸리면 **총알 충돌을 기다리지 않고 맞은 액터에 바로 ApplyDamage**(피해량·피해 타입은 생성한 총알의 `Damage`/`DamageType`) 후 총알 삭제. 즉 근접에선 히트스캔.
+    - 영향: 유탄발사기도 근접에선 폭발 없이 직격 피해만 줌.
+    - 검증: 컴파일·저장만. 직접 플레이로 확인 필요.
   - MCP 메모: 오브젝트 타입 트레이스(`...ForObjects`)는 겹침 전용 트리거도 맞춤. BP 컴포넌트 기본값을 바꿔도 레벨 인스턴스에 이미 저장된 값은 안 바뀔 수 있음 → 인스턴스도 확인. `Projectile`은 오브젝트 채널이라 채널 트레이스로는 못 씀.
 - `IA_Reload` 에셋은 만들어 뒀지만 미사용. 에디터 재시작 후 Enhanced Input 방식으로 바꿀 수 있음(현재 IMC_Weapons에는 R 매핑 없음).
 
