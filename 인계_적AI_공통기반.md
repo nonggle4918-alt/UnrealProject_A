@@ -351,6 +351,27 @@ OnEnemyDied_Event: AliveCount−1 → 0이면 WaveDelay(1.5초) 뒤 StartNextWav
 **남겨 둔 것 (원하면 추가로)**
 - 화면 디버그 출력(`PrintString`, `bDebugLog`) — 빌드(Shipping)에선 자동 제거되지만 PIE에선 화면을 채움.
 - `CleanupBoss`가 카드에 없는 타이머(ChargeTick 등)까지 지우려 해서 매 행동마다 `ClearTimer passed a bad function` 경고가 로그에 찍힘(동작엔 문제없음).
+### 오래 켜면 프레임이 떨어지던 문제 (11/18 저녁)
+
+**원인**
+- `BP_DamageNumber`(피격 숫자)의 BeginPlay가 `SetLifeSpan 0.0`이었음. 0은 "영원히 살아 있음"이라는 뜻.
+- 맞을 때마다 생긴 숫자 액터가 투명해진 뒤에도 사라지지 않고, 매 프레임 위로 이동하는 Tick을 계속 돌았음.
+- 그래서 쏠수록 메모리와 Tick이 쌓였음. DSL에서 실수 값을 위치 인자로 넘기면 0으로 들어가는 함정이 원인.
+
+**수정**
+- `BP_DamageNumber`: `SetLifeSpan :InLifespan 1.0` (0.8초에 완전히 투명해짐).
+- `BP_Enemy.SpawnDrop`: 생성한 드롭이 이미 사라졌으면 `Init`을 건너뜀 (IsValid). 런타임 오류 "BP_DropPickup ... pending kill"을 막음.
+- `WBP_BossHP`: 매 프레임 GetActorOfClass 3번 하던 것을, 찾은 보스를 `BossRef`에 저장하고 없을 때만 0.5초마다 다시 찾도록 바꿈. 표시 로직은 `RefreshBar` 함수로 분리.
+
+**확인한 것**
+- 다른 BP의 `SetLifeSpan`·`Delay`·타이머·Spawn을 전수 검사함. 0으로 들어간 수명은 이 한 곳뿐이었음.
+- 죽은 적의 AIC는 `DetachFromControllerPendingDestroy`로 자동 삭제되므로 쌓이지 않음.
+- 총알 수명 8초, 유탄 3초, 드롭 25초, 래그돌 5초.
+
+**직접 확인하는 법 (PIE 중 `~` 콘솔)**
+- `stat fps`, `stat unit`: 프레임과 병목 확인.
+- `obj list class=BP_DamageNumber_C`: 남아 있는 피격 숫자 개수 확인. 쏘고 1초 뒤 0이면 정상.
+
 ### 렌더링 설정 (11/18, `Config/DefaultEngine.ini`)
 
 | 설정 | 전 → 후 | 이유 |
@@ -369,6 +390,63 @@ OnEnemyDied_Event: AliveCount−1 → 0이면 WaveDelay(1.5초) 뒤 StartNextWav
 - `VolumetricCloud_0`(입체 구름): 실내 방 위주면 지워도 됨. 하늘이 보이는 구조면 유지.
 - `SkyLight_0`의 Real Time Capture 켜짐: 해가 안 움직이면 끄고 한 번만 캡처해도 됨.
 - 방향광(태양) 1개·볼류메트릭 포그 꺼짐 → 이미 가벼운 편.
+
+## 3-15. HUD 마무리: 스킬 쿨타임 · 결과 화면 · 보스 HP (`/Game/UI`, 11/18)
+
+> 한 판이 시작부터 끝까지 돌도록 마무리함. 사망하거나 마지막 방을 클리어하면 결과 화면이 뜨고, RETRY를 누르면 레벨을 처음부터 다시 시작함.
+
+**화면에 붙는 방식**
+- 템플릿 HUD `UI_ShooterBulletCounter`는 PlayerController가 BeginPlay에서 띄움.
+- 그 안의 `Overlay_25`에 `WBP_SkillHUD`와 `WBP_BossHP`를 자식 위젯으로 넣었음 (Fill 정렬).
+- Unity로 치면 프리팹 안에 프리팹을 넣은 구조. 그래서 캐릭터 BeginPlay는 건드리지 않았음.
+
+| 위젯 | 내용 |
+|---|---|
+| `WBP_SkillHUD` | 사용자가 배치한 오른쪽 아래 Q 칸. 로직은 아래 순서. |
+| `WBP_Result` | 반투명 검은 배경 + 제목(`TitleText`) + 부제(`SubText`) + `BtnRetry`. |
+| `WBP_BossHP` | 화면 위 가운데 "BULL BEAST" + 빨간 막대(640×22). |
+
+**WBP_SkillHUD 로직**
+1. Construct: `M_CooldownRadial`로 동적 머티리얼을 만들어 `CDMat`에 저장하고, `Skill_CD` 이미지에 씌움.
+2. Tick → `RefreshSkill`:
+   - 남은 시간 `Left` = Max(`GrenadeReadyTime` − 지금, 0)
+   - `Remaining` = Left ÷ `GrenadeCooldown`
+   - `ApplyCD`로 머티리얼에 `Remaining` 값을 넣고, `Text_Cd`에 올림한 초를 표시.
+
+**WBP_Result**
+- `Setup(Title, Sub)`로 글자를 넣음.
+- RETRY를 누르면 `OnRetry` → `OpenLevel(GetCurrentLevelName)`으로 현재 레벨을 다시 열기.
+- 레벨을 다시 열면 일시정지와 입력 모드도 초기화됨.
+
+**WBP_BossHP**
+- Tick마다 `GetActorOfClass(BP_Enemy_Boss)`로 보스를 찾음.
+- 보스가 살아 있고, 피해를 입었거나 플레이어와 25m 안이면 막대를 보여 줌. 막대 = Health ÷ MaxHealth.
+- 그 외(보스 없음, 죽음, 멀리 있음)에는 숨김.
+
+**사망 → 결과 화면** (`/Game/Core/BP_ShooterPlayerController`)
+- 새 함수 `ShowResult(Title, Sub)`: WBP_Result 생성 → Setup → 화면에 추가(ZOrder 100) → 일시정지 → UI 전용 입력 → 마우스 커서 표시.
+- `OnDestroyed_Event`(조종하던 캐릭터가 사라질 때)를 바꿈.
+  - 원래는 PlayerStart에서 리스폰했음.
+  - 이제 `ShowResult("YOU DIED", "Press RETRY to start a new run")`를 호출.
+  - 캐릭터는 `Die` 후 5초 뒤에 사라지므로, 결과 화면은 사망 약 5초 뒤에 뜸.
+
+**최종 클리어 → 결과 화면** (`/Game/Room/BP_Room`)
+- `StartNextWave`의 최종 방 분기에서 "RUN CLEAR" PrintString 뒤에 `RunClear` 이벤트 호출을 노드로 이어 붙임.
+- `RunClear`: 2초 기다림 → PlayerController의 `ShowResult("RUN CLEAR", "All rooms cleared!")`.
+
+**검증**
+- 컴파일 오류 없음.
+- PIE 20초 동안 런타임 오류 없음, `Game class is BP_GameMode_C` 확인.
+- 사망, 최종 클리어, RETRY, 보스 막대는 MCP로 재현할 수 없어서 직접 플레이로 확인해야 함.
+
+**MCP 메모**
+- 이름이 겹치는 노드는 `create_node`의 `declaring_class`로 골라서 만들고 `connect_pins`로 연결.
+  - 예: Image용 `SetBrushfromMaterial`, KismetMaterialLibrary용 `CreateDynamicMaterialInstance`, MaterialInstanceDynamic용 `SetScalarParameterValue`.
+- 오브젝트 변수는 `add_object_variable`로 만듦 (`add_variable`은 기본 타입만 지원).
+- 버튼 클릭 `(event OnClicked(Btn))`가 "does not exist"로 실패할 때의 우회:
+  1. Construct에서 `BindEventtoOnClicked (Btn) (AddEvent|Custom|X)`를 씀.
+  2. 연결 안 된 Delegate 핀을 X의 OutputDelegate(출력 0)에 `connect_pins`.
+  3. X의 본문을 따로 write.
 
 ## 3-14. 스킬: 수류탄 던지기 (`/Game/Skill`, 11/18)
 
@@ -561,11 +639,11 @@ BP_Room.StartNextWave: 마지막 웨이브 끝 → 문 열기
 - 방 시스템: 적 처치 → 웨이브 2 → 클리어 → 문 열림 → RUN CLEAR (직접 플레이로 확인).
 - 보스: 돌진 피하기 → 약점 1.5배, 사격으로 처치, 애니메이션 배정 확인 (3-9).
 - 증강: 방 클리어 → 선택창 → 효과 반영 (3-11).
-- 수류탄: G → 튕김 → 2초 뒤 폭발·적 피해, 쿨다운 5초 (3-14). 던질 때 플레이어 몸에 걸리지 않는지.
+- 수류탄: Q → 튕김 → 2초 뒤 폭발·적 피해, 쿨다운 5초 (3-14). 던질 때 플레이어 몸에 걸리지 않는지. 오른쪽 아래 칸이 12시부터 시계 반대 방향으로 걷히는지 (3-15).
+- 사망 → 약 5초 뒤 YOU DIED → RETRY로 처음부터 / 마지막 방 클리어 → RUN CLEAR / 보스 접근 시 HP 막대 (3-15).
 
 **다음 구현 후보**
-- 보스 HP 바 UI.
-- 플레이어 사망 → 재시작 (지금은 템플릿 리스폰으로 PlayerStart에서 부활함. 로그라이크라면 "레벨 재시작"으로 바꿀지 결정 필요, 3-8 참고).
+- (완료 11/18) 보스 HP 바, 사망 → 결과 화면 → 레벨 재시작, 최종 클리어 화면 (3-15).
 - 방 구조: 벽으로 방을 막아 문이 실제로 길을 막게 하기, 방 개수 늘리기.
 - 레벨: 경사로 2층 구조, NavMesh 범위 정리.
 
