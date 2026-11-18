@@ -79,7 +79,7 @@ UpdateSensors (0.2초 타이머): 사거리 안 여부(inAttackRange)만 갱신
 | ShootStanding | weaponLoaded, inAttackRange | playerHurt | 1/4 | **노출 판정 → 필요하면 옆걸음** → 조준 0.4초 → 시야 있으면 데미지 10, 탄 −1 (아래 3-4-1) |
 | ShootFromCover | atCover, weaponLoaded, inAttackRange | playerHurt | 1/1 | 위와 같음 (엄폐 상태) |
 | Reload | — | weaponLoaded | 1/1 | 1.5초 → 탄 = MaxAmmo(6) |
-| MeleeAttack | inAttackRange | playerHurt | 1/1 | 사거리 밖이면 먼저 다가감 → 0.35초 → 거리 ≤ 사거리+80이면 데미지 20 (빗나가도 성공 처리해 바로 재계획) |
+| MeleeAttack | inAttackRange | playerHurt | 1/1 | 사거리 밖이거나 **벽에 가려 있으면** 먼저 다가감(길 찾기로 돌아감) → 0.35초 → 거리 ≤ 사거리+80 **이고 시야가 뚫려 있으면(`LineOfSightTo`)** 데미지 20 (빗나가도 성공 처리해 바로 재계획) |
 
 - **거리별 비용**: 카드 변수 `FarDistance`(0이면 끔) / `NearCost` / `FarCost`. `AIC_Enemy.UpdateSensors`(0.2초)가 목표와의 거리로 `CostLowInt/CostHighInt`를 덮어씀. 값은 AIC 자식의 카드 컴포넌트(`Card_Charge` 등)에 설정되어 있음 — 카드 클래스 기본값을 바꿔도 이미 붙은 컴포넌트에는 반영 안 됨.
 - **사거리 판정 여유**: 이미 사거리 안이면 사거리+80까지 유지 → 공격 도중 경계에서 끊기지 않음.
@@ -129,6 +129,12 @@ AIPerception Senses: Sight(1500/2000, 60°), Hearing(2500), Damage, Touch. 모�
   - 원거리: 15m 안 + 시야 있으면 그 자리에서 사격(반격).
   - 근거리: 시야가 보이면 길 찾기 없이 직선으로 접근(`MoveToActor`, bUsePathfinding=false). 시야가 막히면 초록 가장자리까지 가서 0.5초마다 재시도.
 - **적이 초록 밖으로 나간 경우**: Patrol/Investigate의 길 찾기가 실패하면 가장 가까운 초록 지점(범위 2000)으로 직선 복귀 → 다음 재계획 때 정상 동작.
+- **높은 곳에서 내려오기** (11/18): `AIC_Enemy`가 0.5초마다 `CheckHopDown` 실행(OnPossess에서 타이머 시작, 모든 적·보스 공통).
+  - 떨어지는 중이 아니고 마지막 점프 후 2초가 지났을 때만 검사.
+  - 발밑이 초록 영역이 아니면(`ProjectPointToNavigation`, 범위 60/60/260) → `HopTo`로 가장 가까운 초록 지점에 포물선 점프(`SuggestProjectileVelocityCustomArc` + `LaunchCharacter`, 찾는 범위 1500/1500/2000).
+  - 초록 위인데 `bTargetUnreachable`이고 플레이어가 2m 이상 아래면 → 플레이어 쪽 초록 지점으로 점프.
+  - 로그 `[AIC] Stuck high or off navmesh - hop down`.
+  - 검증(PIE): 벽 위(높이 2.6m)에 근접 적·보스를 올려 둠 → 둘 다 바닥으로 내려옴. 다만 이 맵에서는 근접 적은 가장자리에서 걸어 떨어지고, 보스는 점프 내려찍기로 내려와서 **HopTo 자체는 발동 로그를 못 봄**(안전장치로 남겨 둠). 사용자 스크린샷의 기둥에서 실제로 내려오는지 확인 필요.
 - 2층: 계단 대신 **경사로(44° 미만)** 사용. NavMesh Bounds Volume을 2층 높이까지 덮어야 함. 적에게 점프 기능은 없음(사용자가 경사로로 결정).
 
 ### 3-7. 적 몸체 (`BP_Enemy`)
@@ -143,6 +149,20 @@ AIPerception Senses: Sight(1500/2000, 60°), Hearing(2500), Damage, Touch. 모�
   - **시야 체크** `UpdateHPVisible` (0.1초 반복 타이머, BeginPlay에서 시작): 플레이어 카메라 → 적 몸 중심, 카메라 → 체력바 위치로 라인 트레이스 2번(Visibility, 플레이어·자기 자신 무시). **둘 다 막히면 숨김**, 하나라도 보이면 표시, HP 0이면 숨김. 이유: Screen 공간 위젯은 벽 뒤에서도 그려지기 때문. 시작 시엔 숨김 상태.
   - 같이 정리: 크래시 복구 중 생긴 중복 변수 `DamageMult_0` 삭제.
   - 검증(PIE): 보스 스폰 시 체력바 220×18, 머리 위 191cm, 시야 트인 상태에서 보임(시야 체크 후에도), 런타임 오류 없음. 벽 뒤 숨김은 직접 확인 필요(테스트 맵에 키 큰 벽이 없음). 실제 화면 모양·피격 시 줄어드는 것은 직접 플레이로 확인 필요.
+- **헤드샷** (11/18): `BP_Enemy`에 변수 `HeadBone`(Name, `head`) / `HeadRadius`(일반 적 28, 보스 55) / `HeadshotMult`(2.0)와 함수 `GetHeadshotMult(Causer) → Mult` 추가. AnyDamage가 `Damage × DamageMult × Mult`로 깎고, 헤드샷이면 로그가 `[Enemy] HEADSHOT! HP: N`(노란색).
+  - 판정: 데미지를 준 총알(`DamageCauser` = `BP_ShooterProjectileBase`)의 위치와 진행 방향(속도, 0이면 앞 방향)으로 직선을 긋고, **머리 뼈(`GetSocketLocation(Mesh, HeadBone)`)와 그 직선의 거리 ≤ HeadRadius**이고 머리가 총알 뒤쪽 1m보다 앞에 있으면 헤드샷. 총알은 캡슐 표면에서 멈추므로 "맞은 점"이 아니라 "탄도"로 판정함. 근접 보정(`NearHitDamage`)은 총알이 총구에 있을 때 데미지가 들어가지만 총구→조준 방향 직선이라 같은 방식으로 동작.
+  - 폭발(유탄, `ExplodeOnHit`)은 항상 1배. 총 쪽 블루프린트는 안 건드림 — 적 쪽에서만 처리.
+  - 적마다 머리 크기·배율은 각 BP 기본값에서 조정(Unity의 인스펙터 값처럼). 두 메시(Quinn, Beast06) 모두 `head` 뼈 확인함.
+  - ⬜ 미검증: MCP로는 PIE 안에서 조준·발사를 할 수 없어 **실제 사격 테스트는 직접 플레이로 확인 필요**. 컴파일·런타임 오류는 없음.
+- **피격 UX** (11/18)
+  - **조준점** = 템플릿 HUD `Variant_Shooter/UI/UI_ShooterBulletCounter`의 `Image_58`(가운데 20×20 원, 이번에 변수로 노출). 위젯 Tick에서:
+    - 탄 수(`BulletCount`)가 이전 프레임보다 줄면 "발사"로 보고 `LastShotTime` 기록 → 0.15초 동안 크기 목표 1.6배. 안 쏘면 1.0으로 복귀. (총·캐릭터 BP는 안 건드림 — 컨트롤러가 이미 발사마다 탄 수를 HUD로 보내기 때문)
+    - 함수 `HitMarker(bHeadshot)`: 헤드샷이면 `HeadHitTime` 기록 → 0.25초 동안 **빨간색 + 2.2배**.
+    - 크기는 `FInterpTo`(속도 18)로 부드럽게, `SetRenderScale`로 적용.
+  - **데미지 숫자**: `Enemy/UI/WBP_DamageNumber`(TextBlock `Num`, 26pt 외곽선) + 액터 `Enemy/UI/BP_DamageNumber`(Screen 공간 Widget 컴포넌트, 0.8초 수명, 초당 90cm 상승, 0.3초 후 페이드). `Init(Amount, bHead)` → 일반은 연노랑, 헤드샷은 빨강 1.5배. 정수로 반올림.
+  - `BP_Enemy.ShowHitFeedback(Amount, bHead, Inst)`: AnyDamage에서 실제 깎인 양(`Damage × DamageMult × 헤드샷 배율`)으로 호출. 가해자가 `BP_ShooterPlayerController`일 때만 숫자 스폰(헤드샷은 머리 위, 아니면 몸 위 랜덤 ±30cm) + HUD `HitMarker` 호출.
+  - ⚠ 템플릿 HUD 위젯을 직접 수정함(기존 노드 유지, Tick·함수·변수 추가).
+  - ⬜ 미검증: 발사·피격은 직접 플레이로 확인 필요(PIE 실행 시 런타임 오류는 없음).
 
 ---
 
@@ -234,15 +254,30 @@ OnEnemyDied_Event: AliveCount−1 → 0이면 WaveDelay(1.5초) 뒤 StartNextWav
 |---|---|---|---|---|
 | Chase (기존 카드, 거리별 비용 끔) | seesPlayer | inAttackRange | 3 | 걸어서 접근 |
 | `Boss_MeleeCombo` | inAttackRange | playerHurt | 1 | 2연타(20+20, A세트 Attack1→2 / B세트 Attack3→4 무작위). 분노 후엔 3타째 Attack5(30). 끝나면 숨 고르기 Idle2 0.8초(분노 후 0.4) |
-| `Boss_Charge` | seesPlayer, **chargeReady** | playerHurt | 2 | 예고 0.6초 → 방향 고정 → 1500(분노 1800) 속도로 최대 20m 질주. 2.6m 안에 들면 명중 35 + 넉백 + Attack6. **빗나가면 Turn180 1.2초 동안 받는 피해 1.5배(약점)**. 쿨 6초(분노 4초) |
+| `Boss_Charge` | seesPlayer, **chargeReady** | playerHurt | 2 | **방향 고정 → 대기 모션(Idle2) + 바닥 빨간 장판이 1초(분노 0.7초) 동안 차오름 → 다 차면 그 경로로** → 1500(분노 1800) 속도로 최대 20m 질주. 2.6m 안에 들면 명중 35 + 넉백 + Attack6. **빗나가면 Turn180 1.2초 동안 받는 피해 1.5배(약점)**. 쿨 6초(분노 4초) |
 | `Boss_JumpSlam` | seesPlayer, **jumpReady** | playerHurt | 3 | 플레이어 위치를 착지점으로 고정하고 **빨간 원(반경 4.5m, 디버그 원)** 표시 → 포물선 점프 → 착지 시 2.5m 안 45 / 4.5m 안 30 + 밀쳐냄 → 0.8초 경직. 쿨 10초(분노 7초) |
 | `Boss_Rage` | lowHealth | enraged | 1 | HP 50%에서 하던 행동을 끊고 실행. 포효 2초 동안 무적(피해 배율 0) + 5m 안 밀쳐냄 → 걷기 480. 한 번만(`rageDone`) |
 
+- **돌진 장판** (11/18): `BP_Enemy_Boss`에 Plane 메시 컴포넌트 2장 — `ChargeAreaBG`(어두운 빨강, 경로 전체 20m × 3m) + `ChargeAreaFill`(밝은 빨강, 보스 발밑부터 앞으로 길어짐). 머티리얼은 `Boss/FX/MI_ChargeArea_BG`, `MI_ChargeArea_Fill`(엔진 BasicShapeMaterial의 Color 파라미터). 그림자·충돌 없음, 평소엔 숨김.
+  - 보스 함수: `ShowChargeArea(Length, Width)`, `SetChargeFill(Progress 0~1)`, `HideChargeArea`. 돌진 카드가 시작 시 방향(`ChargeDir`)을 확정하고 그쪽으로 몸을 고정(SetFocalPoint) → 장판 표시 → `TeleTick`(0.03초)으로 차오름 갱신 → `TeleDur` 뒤 숨기고 같은 방향으로 질주. 중단·종료 시 `CleanupBoss`가 장판도 숨김.
+  - 검증(PIE): 장판 표시 → 차오름(스케일 증가 확인) → 숨김 → 돌진 명중 35. 실제 화면 모양은 직접 확인 필요.
+  - **버그 수정 (11/18)**: 보스방에서 장판만 차고 돌진하지 않음. 원인: `ChargeGo`의 `MoveToLocation`이 길 찾기 + 목적지 내비메시 투영을 켠 상태였는데, 앞쪽 20m 지점이 초록 영역(NavMesh) 밖이면 이동 요청 자체가 실패 → 제자리에서 0.5초 뒤 "정지"로 판정돼 빗나감 처리. → **길 찾기·투영 끔(직선 질주)**. 벽에 막히면 기존 정지 판정으로 빗나감(약점) 처리됨. 검증(PIE): 보스가 약 15m 직선 질주 → 2회 연속 명중 35.
+  - **경로 고정 + 낭떠러지 정지 (11/18)**: 장판이 뜨면 플레이어가 경로에 없어도 장판 끝까지 질주(도중 2.6m 안에 플레이어가 있으면 명중, 끝까지 가면 정지 판정으로 빗나감·약점). 카드 함수 `CalcChargeLen()`: 고정한 방향으로 1m 간격 20번, 각 지점에서 아래로 3m 라인 트레이스(Visibility, 보스 무시) → **바닥이 없는 첫 지점 − 1.5m**를 돌진 거리로(최대 20m). 장판 길이(`ShowChargeArea`)와 이동 목적지(`ChargeGo`, 보스의 `ChargeLen`)에 같은 값 사용. 로그 `[Boss] Charge telegraph len N`.
+    - 검증(PIE): 맵 끝(바닥 끝까지 약 14m)을 향해 돌진 → `len 1250` → 명중. 방 안 돌진 → 명중 후 추적·연타로 정상 복귀. 플레이어가 피했을 때 끝까지 질주하는 장면은 직접 플레이로 확인 필요(이전 테스트에서 플레이어가 경로에 없을 때 장판 끝까지 질주해 빗나감 처리된 것은 확인).
+  - **버그 수정: 돌진 도중 멈추고 다시 장판 (11/18)**: 로그에 `Action: Boss_Charge`가 0.3~2초 간격으로 반복, 명중/빗나감 로그 없음.
+    - 원인: 돌진 중 몸을 고정 방향으로 돌리면 플레이어가 시야각 밖으로 나가 `seesPlayer`가 잠깐 false → 카드 조건이 깨져 `EvaluateReplan`이 중단·재계획 → 0.01초 뒤 재계획 시점엔 `chargeReady`가 아직 갱신 전(카드 Tick 0.2초 간격)이라 다시 돌진 선택 → 장판부터 재시작.
+    - 조치: `BPC_GoapAction`에 bool **`bUninterruptible`** 추가. `AIC_Enemy.EvaluateReplan`은 현재 카드가 이 값이 켜져 있으면 조건 깨짐·목표 변경으로 중단하지 않음(카드가 스스로 끝나면 평소처럼 다음 계획). `Boss_Charge`, `Boss_JumpSlam`(클래스 기본값 + `AIC_Enemy_Boss`의 `Card_Charge`/`Card_Jump` 컴포넌트) 켬. 돌진은 2초 시간 초과로 반드시 끝남.
+    - **규칙(기획 지시)**: 보스 패턴은 따로 정하지 않으면 끝날 때까지 재계획 안 함 → `BPC_BossAction` 기본값 켬, 현재 패턴 4종(Combo·Charge·Jump·Rage) 모두 켬. 보스의 Chase(이동)는 패턴이 아니라 꺼진 상태 유지.
+    - 새 패턴 카드는 시간 초과 같은 자체 종료 조건을 꼭 넣을 것(안 끝나면 보스가 그 상태로 멈춤).
+    - 검증: 컴파일·저장만. 직접 플레이로 확인 필요.
+    - 참고: 테스트 중 행동 도중 보스를 순간이동시키면 이동 요청이 "Aborted"로 끝나 Chase가 멈추는 현상이 있었음(테스트 조작 때문, 일반 플레이에선 발생 안 함).
 - **컨텍스트 조건 처리**: `chargeReady`(8~25m + 시야 + 쿨 끝), `jumpReady`(6~16m + 쿨 끝)는 각 카드의 Tick이 계산해 `SetWorldFact`로 알림. 다른 카드가 만들 수 없는 사실이라 플래너는 확인만 함(GOAP의 컨텍스트 조건).
 - **분노 판정**: `BP_Enemy_Boss` Tick이 HP ≤ 50%가 되면 `lowHealth`=true. `AIC_Enemy.CheckGoalRelevant`에 `enraged` 분기 추가(조건: lowHealth이고 rageDone이 아님). 두뇌가 목표를 달성하면 그 목표 사실을 false로 되돌리는 구조라서, 분노가 반복되지 않도록 별도 사실 `rageDone`을 둠.
 - **애니메이션**: Animation Blueprint 없이 **Single Node 모드 + `PlayAnimation`** 직접 재생(Unity의 `animation.Play()`와 같은 방식). `BP_Enemy_Boss` Tick이 속도로 Idle1/WalkF/Run을 고르고, 카드가 공격 애니를 틀 때는 `PlayBossAnim`(bActionAnim=true)으로 이동 애니를 잠시 멈춤 → 끝나면 `EndBossAnim`. 루트 모션 없음.
 - 카드의 애니메이션은 카드 변수(`AnimA1`, `AnimRun` 등)라서 `AIC_Enemy_Boss` 디테일 패널에서 바꿀 수 있음.
 - **공통 적 수정**: `BP_Enemy`에 `DamageMult`(피해 배율, 기본 1) 추가. AnyDamage가 `Damage × DamageMult`로 깎음. 기존 근거리·원거리 적은 1이라 변화 없음.
+- **벽 너머 공격 차단** (11/18): 보스의 모든 피해는 `TryHit`, 넉백은 `PushTarget`을 거치는데, 둘 다 `거리 조건 AND LineOfSightTo(AIC → 플레이어)`일 때만 적용. 벽에 막히면 `[Boss] miss`. 구조물에 따로 태그를 달 필요 없이 시야(Visibility)를 막는 충돌체는 전부 벽으로 취급(Unity의 `Physics.Linecast`와 같은 개념). `Boss_MeleeCombo`도 시야가 막혀 있으면 바로 휘두르지 않고 `AIMoveTo`로 돌아서 접근.
+  - 검증(PIE): 두께 1.25m 벽을 사이에 두고 3.4m 거리 → 수정 전엔 `HIT 20`, 수정 후 `miss` → 연타 카드 수정 후에는 벽을 돌아와서 `HIT 20`.
 - 로그: `[Boss] Charge... / HIT 35 / Charge missed! WEAK POINT x1.5 / JUMP SLAM! / SLAM dist N / *** RAGE ***`, `[AIC] Goal/Action`(bDebugLog 켜 둠).
 
 ### 레벨 배치
@@ -263,6 +298,153 @@ OnEnemyDied_Event: AliveCount−1 → 0이면 WaveDelay(1.5초) 뒤 StartNextWav
 ### 작업 중 사고
 
 - `BlueprintTools.set_parent`(부모 변경)로 **에디터 크래시** → 저장 안 한 보스 작업이 사라져 다시 만듦. 이후 카드는 처음부터 `BPC_BossAction` 부모로 생성, 단계마다 저장.
+
+## 3-10. 최적화: 매 프레임 실행(Tick) 정리 (11/18)
+
+**문제**: 행동 카드 자식들이 모두 `Event Tick → 부모 Tick 호출`만 들고 있었음. 부모 Tick은 비어 있지만, 노드가 있으면 언리얼은 "Tick을 구현했다"고 보고 **카드마다 매 프레임 블루프린트를 실행**함. 적 1명당 카드 7~9개 + 플래너 → 적이 늘수록 쓸데없는 호출이 곱으로 늘어남. (Unity로 치면 빈 `Update()`가 붙은 MonoBehaviour가 잔뜩 있는 상태)
+
+**조치** (그래프는 안 건드리고 설정값만 변경)
+| 대상 | 변경 |
+|---|---|
+| 카드 클래스 기본값: Idle, Reload, Patrol, Investigate, Chase, Dodge, ShootStanding, ShootFromCover, TakeCover, Charge, MeleeAttack, `BPC_GoapAction`, `BPC_GoapPlanner`(+`_Boss`), `BPC_BossAction`, `Boss_Rage`, `Boss_MeleeCombo` | `Start with Tick Enabled` 끔 |
+| `AIC_Enemy_Melee` / `_Ranged` / `_Boss`에 붙은 카드 컴포넌트(`Card_*`) | 같은 설정을 컴포넌트에도 끔 ※ |
+| `Boss_Charge`, `Boss_JumpSlam` (Tick에서 chargeReady/jumpReady 계산, 돌진은 시야 레이캐스트 포함) | Tick 간격 0 → **0.2초** |
+| `BP_Enemy_Boss` (이동 애니 선택 + HP 50% 검사) | Tick 간격 **0.1초** |
+| `BP_Room`, `BP_RoomDoor`, `BP_EnemySpawnPoint` (빈 Tick) | `Start with Tick Enabled` 끔 |
+
+※ 블루프린트에 이미 붙어 있는 컴포넌트는 클래스 기본값과 별도로 자기 값을 들고 있어서, 클래스만 바꾸면 적용이 안 됨(PIE에서 확인함). 새 카드를 AIC에 붙이면 클래스 기본값(꺼짐)을 따름.
+
+- 타이머·Delay·AIMoveTo 같은 대기 동작은 Tick과 무관하게 돌아가서 카드 동작에는 영향 없음.
+- **AI 컨트롤러와 캐릭터 본체의 Tick은 건드리지 않음**: AIController Tick이 SetFocus 회전을 처리하기 때문.
+- 이미 잘 돼 있던 것: `SetWorldFact`는 값이 바뀔 때만 재계획 검사(같은 값이면 무시), 감각은 이벤트 방식, HP바 가림 검사는 0.1초 타이머.
+- 검증(PIE): 근접(발견→추적→명중 20), 원거리(ShootStanding), 보스(점프 명중 45, 돌진 → 빗나감 약점 x1.5 로그) 모두 정상. PIE에서 카드 인스턴스의 Tick이 꺼진 것 확인. ※ 에디터가 백그라운드라 PIE가 약 3fps로 돌아 **실제 프레임 수치는 못 잼**.
+- 저장 중 발견: `AIC_Enemy_Melee` 저장 실패("Illegal reference to private object" — 감각 설정 Touch가 부모 `AIC_Enemy` 내부 객체를 가리킴). **컴파일 후 다시 저장하니 성공**. 또 나오면 컴파일 → 저장.
+
+**남겨 둔 것 (원하면 추가로)**
+- 화면 디버그 출력(`PrintString`, `bDebugLog`) — 빌드(Shipping)에선 자동 제거되지만 PIE에선 화면을 채움.
+- `CleanupBoss`가 카드에 없는 타이머(ChargeTick 등)까지 지우려 해서 매 행동마다 `ClearTimer passed a bad function` 경고가 로그에 찍힘(동작엔 문제없음).
+### 렌더링 설정 (11/18, `Config/DefaultEngine.ini`)
+
+| 설정 | 전 → 후 | 이유 |
+|---|---|---|
+| Support Hardware Ray Tracing (`r.RayTracing`) | 켬 → **끔** | 매 프레임 레이트레이싱 가속 구조를 갱신하고, 움직이는 적(스켈레탈 메시)마다 추가 비용. 프로토타입엔 과함 |
+| Lumen 하드웨어 레이트레이싱 (`r.Lumen.HardwareRayTracing`) | 켬 → **끔** | Lumen을 소프트웨어 방식(거리장 기반)으로. GI·반사는 그대로 Lumen |
+| Path Tracing (`r.PathTracing`) | 켬 → **끔** | 오프라인 렌더용. 게임엔 안 쓰는데 셰이더만 늘림 |
+| 안티에일리어싱 (`r.AntiAliasingMethod`) | 없음(0) → **TSR(4)** | AA가 꺼져 있으면 Lumen·가상 섀도 맵의 노이즈를 시간 누적으로 걸러주지 못해 바닥이 지글거림(스크린샷의 거친 바닥). TSR은 해상도를 낮춰 그린 뒤 키우는 업스케일도 함 |
+
+- ⚠ 레이트레이싱 관련 3개는 **에디터 재시작 후 적용**, 재시작 시 셰이더 재컴파일로 처음 한 번 오래 걸릴 수 있음. AA는 바로 적용.
+- 되돌리기: `git checkout Config/DefaultEngine.ini` 또는 프로젝트 설정 → 렌더링에서 다시 켜기.
+- `r.MSAACount=4`는 디퍼드 렌더링에선 원래 무시되는 값이라 그대로 둠.
+- ⬜ 미검증: 재시작 전이라 화면 차이·프레임 수치 미확인.
+
+**레벨에서 더 줄일 수 있는 것 (아직 안 바꿈, 화면이 달라질 수 있음)**
+- `VolumetricCloud_0`(입체 구름): 실내 방 위주면 지워도 됨. 하늘이 보이는 구조면 유지.
+- `SkyLight_0`의 Real Time Capture 켜짐: 해가 안 움직이면 끄고 한 번만 캡처해도 됨.
+- 방향광(태양) 1개·볼류메트릭 포그 꺼짐 → 이미 가벼운 편.
+
+## 3-13. 탄창·예비탄·드롭 (`/Game/Ammo`, 11/18)
+
+> 총마다 탄창 크기(장전당 발수)와 **탄 종류**가 있고, 플레이어가 종류별 **예비탄**을 들고 다님. 재장전은 예비탄을 꺼내 채움. 적이 죽으면 확률적으로 탄약·체력을 떨굼.
+
+### 흐름
+```
+발사 → 탄창 -1 (템플릿 그대로)
+탄창 0 또는 R → Reload: 예비탄이 0이면 아무 일 없음(발사도 안 됨)
+              → 재장전 시간 뒤 TakeReserve(탄창 크기 − 현재 탄) → 받은 만큼만 채움
+적 사망(BecomeRagdoll) → TryDrop: 탄약 확률 / 체력 확률 각각 굴림 → BP_DropPickup 생성
+플레이어가 아이템에 닿음 → 탄약: AddAmmo / 체력: 최대 체력 미만일 때만 회복 → 아이템 삭제
+```
+
+### 에셋
+| 에셋 | 역할 | Unity로 치면 |
+|---|---|---|
+| `BPC_PlayerAmmo` | 플레이어의 예비탄 보관. `AmmoTypes`(이름 배열) + `AmmoCounts`(개수 배열) 쌍, `MaxAmmo` 300. 함수 `GetAmmo(Type)`, `AddAmmo(Type, Amount)`, `TakeAmmo(Type, Want)→Got`. `BP_ShooterCharacter`에 컴포넌트 `Ammo`로 붙어 있음 | 인벤토리 스크립트 |
+| `BP_DropPickup` | 떨어진 아이템 1종으로 탄약·체력 겸용. `Init(Kind, Amount)` — Kind `Ammo`(노란 큐브) / `Health`(초록 구). 회전(RotatingMovement), 25초 뒤 사라짐. 충돌은 `Trigger` 프로필(총알 통과) | 픽업 프리팹 |
+| `MI_Pickup_Ammo` / `MI_Pickup_Health` | 엔진 BasicShapeMaterial 색만 바꾼 머티리얼 인스턴스 | |
+
+- **기본값**: 예비탄 Normal 90발 시작.
+- **무기**: `BP_ShooterWeaponBase`에 `AmmoType`(기본 `Normal`) 추가 → 권총·라이플·유탄발사기 모두 Normal 공용. 함수 `HasReserve()`, `TakeReserve(Want)`. 소유자에 `BPC_PlayerAmmo`가 없으면 무한(기존 동작).
+- **새 탄 종류**: 무기 Class Defaults의 `AmmoType`만 바꾸면 됨(예: `Shell`). 예비탄 배열에 없던 종류는 처음 주울 때 자동 추가. 드롭 아이템의 `AmmoType`도 같이 맞춰야 함(현재 드롭은 Normal 고정).
+- **HUD**: `UI_ShooterBulletCounter`에 텍스트 `AmmoText`("장전 탄 / 예비탄") 추가, 좌하단 탄창 막대 위. Tick에서 `RefreshAmmo` 호출. ⚠ 표시는 `Normal` 고정 — 탄 종류가 늘면 현재 무기의 `AmmoType`을 읽도록 바꿔야 함.
+- **드롭 확률** (`BP_Enemy` 변수, 자식별로 조정 가능)
+  | | 탄약 확률 / 양 | 체력 확률 / 양 |
+  |---|---|---|
+  | 일반 적(근거리·원거리) | 50% / 15발 | 25% / 20 |
+  | 보스 | 100% / 40발 | 100% / 50 |
+  - `TryDrop` → `SpawnDrop(Kind, Amount, OffsetY)`: 캡슐 바닥 근처(발밑 +35)에 생성, 둘 다 나오면 좌우 30씩 벌림.
+- 로그: `[Ammo] +15 total 75`, `[Pickup] Health`.
+- MCP 메모: 반환값이 있는 BP 함수(예: `GetAmmo`)를 다른 노드 안에 식으로 넣으면 실행 핀이 안 이어져 **"pruned" 경고와 함께 기본값(0)** 이 들어감 → 반드시 `(bind _n (...))`로 먼저 호출. `SetLifeSpan 25.0`처럼 위치 인자 float가 0으로 들어가는 경우가 있어 `:InLifespan` 키워드 사용. Name 비교는 `==`.
+- 검증: 컴파일 오류 없음, 저장 완료. ⬜ 직접 플레이로 확인 필요: 예비탄 감소·0일 때 재장전 불가, HUD 숫자, 적 처치 시 드롭·줍기.
+- **버그 수정 (11/18, 사용자 플레이)**: 라이플 탄이 `-21 / 105`로 음수까지 내려가고 재장전 안 됨.
+  - 원인 1: `AmmoType`을 부모 무기에 추가한 뒤 기본값을 넣었는데 **라이플 자식만 `None`으로 남음**(권총·유탄은 Normal). → 예비탄 찾기 실패 → `HasReserve` false → 재장전 거부.
+  - 원인 2: 재장전이 거부되면 `StopFiring`이 안 불려 연사 타이머가 계속 돌고, `StartFiring`의 탄 검사는 "0이 아니면 발사"라 음수도 통과.
+  - 조치: 라이플 `AmmoType` = Normal. `Reload`에서 예비탄이 없고 탄창이 0 이하면 **StopFiring + 탄 0으로 고정 + `[Weapon] No ammo`**. `GetAmmo`는 select 대신 if로(BP select는 양쪽을 다 계산해서 인덱스 −1 경고가 나던 것).
+  - **규칙(기획 지시)**: 탄은 정수, 최소 0. 0이면 발사 안 됨, 예비탄이 있으면 자동 재장전(모션 포함).
+    - `Fire` 이벤트(연사 타이머가 반복 호출)에 **탄 > 0** 조건 추가 → 0발에선 총알 생성 자체가 안 됨.
+    - 0이 되는 순간 `FireBullet`이 `Reload` 호출 → 예비탄 있으면 장전 모션 + 채움, 없으면 연사 정지 + `No ammo`. 0발에서 다시 쏘려 해도 `StartFiring`이 `Reload`로 보냄.
+    - 예비탄: `TakeAmmo`/`AddAmmo` 결과를 0~`MaxAmmo`로 Clamp.
+    - ⚠ MCP: `Fire`를 다시 쓰면 타이머의 `Create Event` 노드가 **빈 함수·미연결로 새로 생김** → `connect_pins`(CreateEvent.OutputDelegate → SetTimerbyEvent.Delegate) + `set_create_event_function`(연사 = `Fire`, 단발 = `Fire Cooldown Expired`)으로 복구함. 이 이벤트를 또 고치면 같은 복구 필요.
+  - 같이 고친 것: 바로 옆에서 처치하면 아이템이 생성 즉시 먹혀 `Init`에서 오류 → 아이템 `Trigger`를 처음엔 충돌 끔, **0.5초 뒤 켬**(켜지는 순간 겹쳐 있으면 바로 주움). `M_HitFlash`에 `Used with Skeletal Mesh` 켬(빠져 있어서 번쩍임이 기본 머티리얼로 대체되던 경고).
+
+## 3-12. 피격 이펙트 (`/Game/FX`, 11/18)
+
+적이 총에 맞으면 **불꽃이 튀고 몸이 한 번 번쩍임**. 데미지 숫자·크로스헤어 반응과 같은 시점(`BP_Enemy.ShowHitFeedback`).
+
+| 에셋 | 내용 | Unity로 치면 |
+|---|---|---|
+| `NS_HitSpark` | 엔진 템플릿 DirectionalBurst 복제. 불꽃 14개, 수명 0.15~0.35초, 주황 발광(HDR 8,3,0.6), 꼬리선(리본) 0.2초. 로컬 X축 방향으로 튐 | VFX Graph / Particle System 프리팹 |
+| `M_HitFlash` | 반투명·Unlit, 따뜻한 흰색 발광, 불투명도 0.55 | 피격 셰이더 |
+
+- `BP_Enemy.PlayHitFX(bHead, Src)`: 맞은 위치(헤드샷이면 머리 본, 아니면 몸통 +30) → 쏜 사람 방향으로 25 앞에서 불꽃 생성, **쏜 사람 쪽을 향하게** 회전 → 불꽃이 플레이어 쪽으로 튐. 이어서 `HitFlash`.
+- `HitFlash` 이벤트: 메시에 **오버레이 머티리얼**(`SetOverlayMaterial`, 원래 머티리얼 위에 한 겹 덧그림)로 `M_HitFlash`를 0.08초 씌웠다가 해제. 적의 원래 머티리얼은 안 건드림.
+- 보스 포함 모든 적(`BP_Enemy` 자식) 공통.
+- 조정: 불꽃 양·색은 `NS_HitSpark`의 DirectionalBurst 모듈(SpawnBurst 개수, InitializeParticle 색·수명), 번쩍임 세기는 `M_HitFlash`의 상수 2개, 시간은 `HitFlash`의 Delay.
+- 검증: 컴파일·저장, Niagara 컴파일 오류 없음. ⬜ 실제 화면 모양은 직접 플레이로 확인 필요.
+
+## 3-11. 증강 시스템 (`/Game/Augment`, 11/18)
+
+> 방을 클리어하면 증강 3개 중 1개를 고른다. 나중에 반오픈월드 미션으로 바꿔도 **`OfferAugment()`만 부르면** 되게 분리함.
+
+### 흐름
+```
+BP_Room.StartNextWave: 마지막 웨이브 끝 → 문 열기
+  ├ 최종 방(bFinalRoom)   → "RUN CLEAR"
+  └ 아니면               → 플레이어의 BPC_PlayerAugments.OfferAugment()
+                              → Pool 섞기 → 앞 3개로 WBP_AugmentSelect 띄움
+                              → 게임 일시정지 + 마우스 커서 + UI 입력
+버튼 클릭 → WBP_AugmentSelect.Pick(ID) → ApplyAugment(ID) → 일시정지 해제·UI 닫기
+```
+
+### 에셋
+| 에셋 | 역할 | Unity로 치면 |
+|---|---|---|
+| `BPC_PlayerAugments` | 증강 수치 보관 + 적용. `BP_ShooterCharacter`에 컴포넌트 `Augments`로 붙어 있음 | 플레이어에 붙인 스탯 MonoBehaviour |
+| `WBP_AugmentSelect` | 카드 3장 선택 화면 (`Setup(I0,I1,I2)`, `Pick(ID)`) | 선택 UI 프리팹 |
+
+### 증강 6종 (`GetInfo`에 이름·설명, `ApplyAugment`에 효과)
+| ID | 이름 | 효과 | 어디에 반영 |
+|---|---|---|---|
+| Damage | 화력 강화 | 데미지 +20% (누적) | `BP_Enemy` AnyDamage에서 `× DamageMult` |
+| MaxHP | 강인한 체력 | 최대 체력 +25, 즉시 25 회복 | 플레이어 `MaxHP/CurrentHP` + 체력 UI |
+| Headshot | 저격수의 눈 | 헤드샷 배율 +0.5 (2.0 → 2.5) | `BP_Enemy` AnyDamage에서 헤드샷일 때 `+ HeadshotBonus` |
+| Speed | 신속 | 이동 속도 ×1.1 | CharacterMovement `MaxWalkSpeed` |
+| KillHeal | 흡혈 | 처치 시 체력 +5 | `BP_Enemy` 사망 직전 `AugOnKill` → `OnKill` |
+| Reload | 빠른 손 | 재장전 시간 ×0.8 | `BP_ShooterWeaponBase.Reload`의 Delay에 `× GetOwnerReloadMult` |
+
+- 같은 증강을 여러 번 골라도 누적됨(중복 허용). 고른 기록은 `Taken` 배열.
+- 증강 추가: `Pool`에 ID 추가 → `GetInfo`에 이름/설명 → `ApplyAugment`에 분기 추가.
+- 적·무기 쪽은 `GetComponentByClass` + IsValid로 찾음 → 컴포넌트가 없으면 배율 1(기존과 동일).
+
+### 수정한 기존 BP
+- `BP_Enemy`: 함수 `GetPlayerAug()`(DmgMult, HsBonus), `AugOnKill()` 추가, AnyDamage 다시 씀(최종 데미지 = 기본 × DamageMult(적) × 헤드샷 × 증강 데미지).
+- `BP_ShooterWeaponBase`: 함수 `GetOwnerReloadMult()` 추가, `Reload` 이벤트의 Delay만 바꿈.
+- `BP_Room`: `StartNextWave`의 "최종 방 아님" 분기에 OfferAugment 연결.
+  - ⚠ 다시 쓸 때 `AddEvent|Custom|OnEnemyDied_Event`가 **새 빈 이벤트(`_6`)를 만들어 거기 바인딩**함 → `OnEnemyDied_Event_6`에 기존 본문을 복사해 해결. 지금 실제로 쓰이는 건 `_6`이고, `OnEnemyDied_Event`(본문 있음)와 `_0`~`_5`·`CustomEvent`(빈 이벤트)는 안 쓰임. StartNextWave를 또 고치면 번호가 또 늘어나니 같은 조치 필요.
+
+### 검증
+- 컴파일 오류 없음, 저장 완료.
+- ⬜ 직접 플레이로 확인 필요: 방 클리어 → 선택창 뜨는지 / 클릭 후 게임 재개 / 데미지 숫자 증가 / 헤드샷 / 흡혈 / 재장전 시간.
+- 확인 포인트: 화면 좌상단 `[Augment] Picked X` 로그.
 
 ---
 
@@ -307,6 +489,7 @@ OnEnemyDied_Event: AliveCount−1 → 0이면 WaveDelay(1.5초) 뒤 StartNextWav
 - 조사 6초 시간 초과, Charge 속도 900→600 복귀.
 - 방 시스템: 적 처치 → 웨이브 2 → 클리어 → 문 열림 → RUN CLEAR (직접 플레이로 확인).
 - 보스: 돌진 피하기 → 약점 1.5배, 사격으로 처치, 애니메이션 배정 확인 (3-9).
+- 증강: 방 클리어 → 선택창 → 효과 반영 (3-11).
 
 **다음 구현 후보**
 - 보스 HP 바 UI.
