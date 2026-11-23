@@ -11,11 +11,15 @@ public class UnrealProject_A : ModuleRules
 			"Core",
 			"CoreUObject",
 			"Engine",
+			"InputCore",
+			"EnhancedInput",
 			"GameplayAbilities",
 			"GameplayTags",
-			"GameplayTasks"
+			"GameplayTasks",
+			"DeveloperSettings",
+			"UMG"
 		});
 
-		PrivateDependencyModuleNames.AddRange(new string[] { "NetCore" });
+		PrivateDependencyModuleNames.AddRange(new string[] { "NetCore", "Slate", "SlateCore" });
 	}
 }
