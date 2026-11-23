@@ -1,6 +1,6 @@
 # 인계: 적 AI (GOAP) + 플레이어 무기 + 방 시스템
 
-최종 갱신: 2026-11-18 / 다음 세션은 이 문서부터 읽고 시작
+최종 갱신: 2026-11-20 (11/19 작업분 반영, 3-17. AI 관련은 이번 갱신에서 제외) / 다음 세션은 이 문서부터 읽고 시작
 
 ---
 
@@ -391,6 +391,36 @@ OnEnemyDied_Event: AliveCount−1 → 0이면 WaveDelay(1.5초) 뒤 StartNextWav
 - `SkyLight_0`의 Real Time Capture 켜짐: 해가 안 움직이면 끄고 한 번만 캡처해도 됨.
 - 방향광(태양) 1개·볼류메트릭 포그 꺼짐 → 이미 가벼운 편.
 
+## 3-17. 플레이어·충돌·정리 작업 + 브랜치 머지 (11/19, AI 제외)
+
+**플레이어 / 입력** (`BP_ShooterCharacter`, `/Game/Input`)
+- Shift 달리기: `SprintStart`/`SprintStop`, 속도 × `SprintMult`(1.6), 변수 `Sprinting`.
+- R/Q/Shift를 키보드 이벤트 → Enhanced Input(`IA_Reload`, `IA_SkillQ`, `IA_Sprint`, `IMC_Weapons`에 매핑)으로 사용자가 직접 교체.
+- UI가 열리면 달리기 해제: `BP_ShooterPlayerController.StopPlayerSprint`(ShowResult 시작), `BPC_PlayerAugments.StopOwnerSprint`(OfferAugment 시작).
+
+**쌓이는 객체 정리**
+- 결과/증강 화면 진입 시 남은 데미지 숫자 제거: `ClearDamageNumbers`(컨트롤러), `ClearHitNumbers`(증강). `BP_DamageNumber` 전부 Destroy.
+- `UI_ShooterBulletCounter.RefreshAmmo`: 사망 후 Pawn이 없을 때 IsValid 검사 추가 → Accessed None 517건 해결.
+
+**충돌** (오브젝트 채널 `Projectile` = `ECC_GameTraceChannel1`)
+- 총알끼리 막혀 연사 중 총알이 멈추던 문제: `BP_ShooterProjectileBase` BeginPlay에서 Projectile 채널 Ignore.
+- 탄피(`BP_ShooterProjectile_Bullet`, PhysicsActor 프로필)도 Projectile 채널 Ignore → 바닥 탄피가 총알을 막지 않음.
+- 적 4종 CDO에 태그 `Enemy`. `BP_Enemy.CheckFriendly`: 가해자 Pawn이 `Enemy` 태그면 피해 무시.
+- ⬜ 미검증: 연사 시 총알 멈춤이 사라졌는지 직접 플레이로 확인.
+
+**새 에셋**: `/Game/FX/M_Telegraph`(반투명 빨강 점멸 오버레이), `/Game/FX/M_EnemyBolt`, `/Game/Enemy/BP_EnemyProjectile`(임시: 엔진 구체). 쓰임새는 AI 쪽이라 이 문서에서는 생략.
+
+**브랜치 / 머지**
+- 커밋: `b205dd3`(이번 작업), `b7fb78a`(누락된 `IA_Sprint` + 재저장 BP).
+- `origin/LKH` → `feat/room-system` 머지 `ac80976`, `feat/room-system` → `main` 머지 `7535cd3`. 둘 다 충돌 없음, push 완료.
+- 첫 LKH 머지 실패 원인: 에디터가 `MainLevel.umap`·`BP_EnemySpawnPoint.uasset`을 열고 있어서 덮어쓰기 실패 → 미추적 파일 4,712개만 남음. **머지 전에는 에디터를 닫을 것.** 머지 중 다시 누르면 `index.lock` 오류(첫 머지는 계속 진행 중).
+- `stash@{0}`: main 전환 때 남은 파일 보관본. main과 내용 동일 확인 → 버려도 됨.
+- 미커밋: `Content/AdvancedCompanionDroneSystem/`(드론 에셋 팩, 330개·460MB). 쓸지 정한 뒤 커밋.
+
+**전체 최적화·안정화 감사 (중단)**
+- `Saved/BPAudit/`에 BP DSL 텍스트 덤프 44/58개(git 미포함). 보고서(`report_*.md`)는 나오기 전에 사용자 요청으로 중단.
+- 재개 방법: 에디터를 켠 뒤 덤프를 다시 돌리고(BlueprintTools.list_graphs + read_graph_dsl → AssetTools.write_file), 읽기 전용 감사를 함수 최적화 / 안정화 / 제거 누락(프레임 드랍)으로 나눠 맡기고, 수정은 한 곳에서 적용.
+
 ## 3-16. 스테이지 벽 · 바닥 구분 (MainLevel, 11/18)
 
 평원이라 방 구분이 안 되던 문제 → 엔진 기본 큐브로 벽(높이 4m, 두께 40cm)을 세우고 방마다 바닥 색을 다르게 깔았다.
@@ -662,6 +692,11 @@ BP_Room.StartNextWave: 마지막 웨이브 끝 → 문 열기
 - 수류탄: Q → 튕김 → 2초 뒤 폭발·적 피해, 쿨다운 5초 (3-14). 던질 때 플레이어 몸에 걸리지 않는지. 오른쪽 아래 칸이 12시부터 시계 반대 방향으로 걷히는지 (3-15).
 - 벽 구조: 문이 닫히면 실제로 막히는지, 적이 출입구로 돌아 들어오는지, 스폰 위치가 벽에 안 끼는지 (3-16).
 - 사망 → 약 5초 뒤 YOU DIED → RETRY로 처음부터 / 마지막 방 클리어 → RUN CLEAR / 보스 접근 시 HP 막대 (3-15).
+- 연사 중 총알 멈춤 해결 여부, 증강 화면에서 데미지 숫자가 지워지는지, Shift 달리기 (3-17).
+
+**다음 작업 (3-17)**
+- 전체 최적화·안정화 감사 재개(중단됨).
+- 드론 에셋 팩 사용 여부 결정 후 커밋.
 
 **다음 구현 후보**
 - (완료 11/18) 보스 HP 바, 사망 → 결과 화면 → 레벨 재시작, 최종 클리어 화면 (3-15).
@@ -694,4 +729,8 @@ BP_Room.StartNextWave: 마지막 웨이브 끝 → 문 열기
 - `BlueprintTools.create`로 InputAction 같은 비-BP 에셋을 만들면 에디터에 대화상자가 떠서 멈춤 → 기존 에셋 `duplicate`로 만들 것.
 - AnimMontage의 `SequenceLength`는 set_properties로 안 바뀜 → 몽타주 대신 `PlaySlotAnimationAsDynamicMontage` 사용.
 - 디버그 로그: `AIC_Enemy.bDebugLog`가 켜져 있으면 `[AIC] Goal/Action/...`이 화면·로그(`Saved/Logs/UnrealProject_A.log`)에 출력. 로그 줄의 `[프레임번호]`로 대략 FPS를 계산할 수 있음.
+- (11/19) 툴셋 이름: PIE는 `EditorToolset.EditorAppToolset`(StartPIE는 `options` 필수, "PIE ended before warmup" 오류가 나도 실제로는 실행됨), 텔레포트는 `ActorTools.set_actor_transform`(`xform`), 속성은 `ObjectTools.get/set_properties`(`instance`, `properties`).
+- (11/19) PIE 중 컴포넌트 인스턴스를 set_properties로 바꾸면 재생성되어 망가짐 → BP 템플릿(`..._C:이름_GEN_VARIABLE`) 값을 바꿀 것.
+- (11/19) 방 트리거는 텔레포트로 안쪽에 바로 넣으면 안 걸림 → 밖에 뒀다가 안으로 옮길 것.
+- (11/19) 새 함수가 DSL에서 안 잡히면 `find_node_types`로 실제 이름 확인(예: `FireAtTarget` → `CallFunction|FireatTarget`).
 - PIE가 3fps로 고정되면 에디터 백그라운드 절전(Editor Preferences → Performance → Use Less CPU when in Background) 때문.
