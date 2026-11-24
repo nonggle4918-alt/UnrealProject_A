@@ -308,6 +308,18 @@ struct FPAGrowthForm
 	/** 외형(무기 BP). 비어 있으면 무기 교체 없이 수치만 바뀐다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Growth")
 	TSoftClassPtr<AActor> WeaponClass;
+
+	/** 외형: 총 메시 교체(1인칭·3인칭 둘 다). 비어 있으면 원래 메시. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Growth|Look")
+	TSoftObjectPtr<USkeletalMesh> WeaponMesh;
+
+	/** 외형: 총 가장자리 발광색(M_GrowthGlow 오버레이). 검정이면 발광 없음. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Growth|Look")
+	FLinearColor GlowColor = FLinearColor::Black;
+
+	/** 외형: 총 크기 배율. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Growth|Look", meta = (ClampMin = "0.5", ClampMax = "2.0"))
+	float WeaponScale = 1.f;
 };
 
 /** 피해 계산 결과 (데미지 숫자·히트마커용). */

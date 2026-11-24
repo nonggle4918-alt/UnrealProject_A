@@ -151,6 +151,12 @@ private:
 	void HandleActorSpawned(AActor* Actor);
 
 	TMap<TWeakObjectPtr<AActor>, FWeaponBaseStats> WeaponBaseStats;
+
+	/** 메시 컴포넌트의 원래 크기 (외형 크기 배율 기준). */
+	mutable TMap<TWeakObjectPtr<USceneComponent>, FVector> BaseScales;
+
+	/** 형태 외형(메시·발광·크기)을 무기에 입힌다. 모든 머신에서 실행(화면용). */
+	void ApplyFormLook(AActor* Weapon) const;
 	FDelegateHandle ActorSpawnedHandle;
 
 	void CheckEvolution();

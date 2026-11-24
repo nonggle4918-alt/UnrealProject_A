@@ -1,6 +1,9 @@
 #include "Weapon/PAGrowthWeaponComponent.h"
 
 #include "Blueprint/UserWidget.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "Engine/SkeletalMesh.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "TimerManager.h"
@@ -131,6 +134,7 @@ void UPAGrowthWeaponComponent::ApplyFormToWeapon(AActor* Weapon)
 	{
 		return;
 	}
+	ApplyFormLook(Weapon);
 	FDoubleProperty* RefireProp = FindFProperty<FDoubleProperty>(Weapon->GetClass(), PAGrowthWeaponVars::RefireRate);
 	FIntProperty* MagProp = FindFProperty<FIntProperty>(Weapon->GetClass(), PAGrowthWeaponVars::MagSize);
 	if (!RefireProp || !MagProp)
@@ -376,6 +380,51 @@ void UPAGrowthWeaponComponent::ChooseEvolution(FName NewFormId)
 void UPAGrowthWeaponComponent::Server_ChooseEvolution_Implementation(FName NewFormId)
 {
 	ChooseEvolution(NewFormId);
+}
+
+namespace PAGrowthLook
+{
+	const TCHAR* GlowMaterialPath = TEXT("/Game/FX/M_GrowthGlow.M_GrowthGlow");
+	const FName GlowColorParam(TEXT("GlowColor"));
+}
+
+void UPAGrowthWeaponComponent::ApplyFormLook(AActor* Weapon) const
+{
+	const FPAGrowthForm* Form = UPAProjectSettings::Get()->FindGrowthForm(FormId);
+	if (!Weapon || !Form || GetNetMode() == NM_DedicatedServer)
+	{
+		return;
+	}
+	USkeletalMesh* NewMesh = Form->WeaponMesh.IsNull() ? nullptr : Form->WeaponMesh.LoadSynchronous();
+	UMaterialInterface* GlowBase = Form->GlowColor.Equals(FLinearColor::Black)
+		? nullptr : LoadObject<UMaterialInterface>(nullptr, PAGrowthLook::GlowMaterialPath);
+
+	TArray<USkeletalMeshComponent*> Meshes;
+	Weapon->GetComponents(Meshes);
+	for (USkeletalMeshComponent* Mesh : Meshes)
+	{
+		if (!Mesh)
+		{
+			continue;
+		}
+		if (NewMesh && Mesh->GetSkeletalMeshAsset() != NewMesh)
+		{
+			Mesh->SetSkeletalMeshAsset(NewMesh);
+		}
+		// 크기: 처음 본 크기를 기준으로 배율 (진화를 거듭해도 누적되지 않게).
+		const FVector& Base = BaseScales.Contains(Mesh) ? BaseScales[Mesh] : BaseScales.Add(Mesh, Mesh->GetRelativeScale3D());
+		Mesh->SetRelativeScale3D(Base * Form->WeaponScale);
+		if (GlowBase)
+		{
+			UMaterialInstanceDynamic* Glow = UMaterialInstanceDynamic::Create(GlowBase, Mesh);
+			Glow->SetVectorParameterValue(PAGrowthLook::GlowColorParam, Form->GlowColor);
+			Mesh->SetOverlayMaterial(Glow);
+		}
+		else
+		{
+			Mesh->SetOverlayMaterial(nullptr);
+		}
+	}
 }
 
 void UPAGrowthWeaponComponent::ApplyEvolution(FName NewFormId)

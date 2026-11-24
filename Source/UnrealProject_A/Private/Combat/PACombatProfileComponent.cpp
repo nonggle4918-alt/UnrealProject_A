@@ -14,6 +14,10 @@
 #include "PAProjectSettings.h"
 #include "TimerManager.h"
 #include "Components/WidgetComponent.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "Engine/StaticMesh.h"
+#include "GameFramework/Character.h"
 #include "UI/PAEnemyDefenseWidget.h"
 #include "Weapon/PAGrowthWeaponComponent.h"
 
@@ -89,6 +93,10 @@ void UPACombatProfileComponent::BeginPlay()
 		};
 		ReadClassFloat(TEXT("ProfileMaxArmor"), OverrideMaxArmor);
 		ReadClassFloat(TEXT("ProfileMaxShield"), OverrideMaxShield);
+		if (GetNetMode() != NM_DedicatedServer)
+		{
+			ApplyBodyMesh(ClassDefaults);
+		}
 	}
 
 	ApplyTags();
@@ -136,6 +144,38 @@ void UPACombatProfileComponent::SetProfile(EPAEnemyRace NewRace, EPAEnemyRank Ne
 	{
 		InitializeProfile();
 	}
+}
+
+void UPACombatProfileComponent::ApplyBodyMesh(const AActor* ClassDefaults)
+{
+	const FObjectProperty* MeshProp = CastField<FObjectProperty>(ClassDefaults->GetClass()->FindPropertyByName(TEXT("ProfileBodyMesh")));
+	UStaticMesh* Body = MeshProp ? Cast<UStaticMesh>(MeshProp->GetObjectPropertyValue_InContainer(ClassDefaults)) : nullptr;
+	ACharacter* Character = Cast<ACharacter>(GetOwner());
+	if (!Body || !Character)
+	{
+		return;
+	}
+	float Scale = 1.f;
+	if (const FDoubleProperty* ScaleProp = CastField<FDoubleProperty>(ClassDefaults->GetClass()->FindPropertyByName(TEXT("ProfileBodyScale"))))
+	{
+		Scale = FMath::Max(0.05f, static_cast<float>(ScaleProp->GetPropertyValue_InContainer(ClassDefaults)));
+	}
+
+	// 캐릭터 메시는 숨기기만 한다(피격 판정·뼈 위치는 그대로 쓴다).
+	Character->GetMesh()->SetVisibility(false, false);
+
+	UStaticMeshComponent* BodyComp = NewObject<UStaticMeshComponent>(Character, TEXT("PABodyMesh"));
+	BodyComp->SetStaticMesh(Body);
+	BodyComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	BodyComp->SetupAttachment(Character->GetRootComponent());
+	BodyComp->SetWorldScale3D(FVector(Scale));
+	BodyComp->RegisterComponent();
+	Character->AddInstanceComponent(BodyComp);
+	// 바닥에 닿게: 메시 아래 끝을 캡슐 바닥에 맞춘다.
+	const FBoxSphereBounds Bounds = BodyComp->CalcBounds(BodyComp->GetComponentTransform());
+	const float CapsuleBottom = Character->GetActorLocation().Z - Character->GetSimpleCollisionHalfHeight();
+	const float MeshBottom = Bounds.Origin.Z - Bounds.BoxExtent.Z;
+	BodyComp->AddWorldOffset(FVector(0.f, 0.f, CapsuleBottom - MeshBottom));
 }
 
 void UPACombatProfileComponent::SpawnDefenseBar()

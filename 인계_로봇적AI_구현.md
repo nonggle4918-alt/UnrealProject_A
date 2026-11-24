@@ -82,13 +82,13 @@
 |---|---|---|---|---|
 | 안드로이드 | `BP_Enemy_Android` (Ranged) | `AIC_Enemy_Android` (Ranged) | Ranged 9종 + RechargeShield, Overdrive | Tags Robot |
 | 메크 | `BP_Enemy_Mech` (기존) | `AIC_Enemy_Mech` (AIC_Enemy) **새로 지정** | Patrol, Idle, Investigate, Advance, ShootStanding(비용 3), Suppress(2), Stomp(1), VentCore, Reload | 속도 320, 지능 1, 사거리 1500, 탄 9. 목표에서 `safe` 뺌(회피 카드 없음) |
-| 크롤러 | `BP_Enemy_Crawler` (Melee) | `AIC_Enemy_Crawler` (AIC_Enemy) | Patrol, Idle, Investigate, SelfDestruct | 체력 40, 갑옷·실드 0, 속도 450(돌진 900), Tags Robot, **몸 크기 0.55배** |
+| 크롤러 | `BP_Enemy_Crawler` (Melee) | `AIC_Enemy_Crawler` (AIC_Enemy) | Patrol, Idle, Investigate, SelfDestruct | 체력 40, 갑옷·실드 0, 속도 450(돌진 900), Tags Robot. 외형: 드론 메시(`SM_AerisUndeployed` ×2.2, BP 변수 `ProfileBodyMesh`/`ProfileBodyScale`) |
 
 - 스폰: `BP_EnemySpawnPoint.EnemyType`에 `Android`, `Crawler` 추가.
 - **MainLevel 테스트 배치 변경**: 스폰 C_4 Ranged → **Android**, C_3 Melee → **Crawler**. (C_2는 원래 Mech) — 원래대로 돌리려면 두 값을 되돌릴 것.
 
 ### 3-6. 설계 문서와 다른 점
-- VentCore: 설계는 "등 코어 소켓 약점 ×3". 메시에 `core` 소켓이 없고 헤드샷 배율은 무기 쪽이 우선이라 **받는 피해 2배**로 대체.
+- VentCore: 설계는 "등 코어 소켓 약점 ×3". 메시에 `core` 소켓이 없고 헤드샷 배율은 무기 쪽이 우선이라 **받는 피해 2배**로 대체. 노출 중엔 가슴(spine_03)에 주황 발광 구체+불빛(`SetCoreExposed`).
 - 크롤러: 설계는 "GOAP 없는 단순 상태 기계". 기존 구조 재사용을 위해 **카드 1장짜리 GOAP**로 구현(효과는 같음).
 - 기계음은 전용 에셋이 없어 드론 팩 소리를 임시로 씀.
 - 토큰은 방 단위가 아니라 **월드 단위**(한 번에 한 방에서 싸우므로 같은 효과).
@@ -96,7 +96,7 @@
 
 ### 3-7. 그 밖에 이번에 고친 것
 - **달리기 × 이동속도 모듈**: `BP_ShooterCharacter`의 달리기 시작/끝 `SetMaxWalkSpeed` 곱셈에 `GetCombatStat(Self, "MoveSpeedMult")`를 세 번째 항으로 추가(모듈 없으면 1). 기존 인계 문서 §4-1의 ⚠ 해결.
-- **대기실 레벨 `LV_Lobby`**: 엔진 `Template_Default`를 복제해 `/Game/Level/LV_Lobby` 생성·저장. 게임 모드는 C++가 `?game=PALobbyGameMode`로 열어서 월드 설정 지정 불필요.
+- **대기실 레벨 `LV_Lobby`**: 엔진 `Template_Default`를 복제해 `/Game/Level/LV_Lobby` 생성·저장. C++가 `?game=PALobbyGameMode`로 열고, 레벨에서 바로 PIE해도 되게 World Settings GameMode Override도 `PALobbyGameMode`로 지정. 일본 골목 소품·네온 조명·`LobbyCamera` 태그 카메라 배치(아웃라이너 `Lobby` 폴더).
 
 ## 4. 파일
 
@@ -113,7 +113,7 @@
 ## 5. 직접 플레이로 확인할 것
 - [ ] 1번(권총)·2번(성장형) 피해 숫자 차이, 헤드샷 배율 차이
 - [ ] `PA.GrowthXp 270` → 진화 창 → 진화 후 연사·탄창 변화
-- [ ] V 근접, 모듈 키(F/C/Z/X) 발동
+- [ ] V 근접, 스킬 Q/E 발동
 - [ ] 안드로이드: 실드 깨면 물러나 충전(시안 눈), 갑옷 깨면 돌진(주황 눈)
 - [ ] 메크: 천천히 전진, 제압 사격 예고(빨간 눈) 0.8초, 가까이 가면 발 구르기로 밀려남, 갑옷 깨면 "코어 노출!" + 피해 2배
 - [ ] 메크 2마리가 있어도 제압 사격이 동시에 안 나옴
@@ -128,6 +128,5 @@
 1. 위 체크리스트 플레이 확인 → 수치 조정(크롤러 폭발 피해, 메크 제압 사격 발수).
 2. 메크 메시에 `core` 소켓 → VentCore를 약점 배율 방식으로.
 3. 눈 LED·기계음 멀티캐스트(협동), 로봇 전용 사운드.
-4. 크롤러 전용 메시/색 — 지금은 근접 적 몸을 0.55배로 줄인 것.
-5. 대기실 레벨 꾸미기(지금은 기본 템플릿 바닥·하늘).
-6. 커밋: 이번 작업 전체가 미커밋 상태.
+4. ~~크롤러 전용 메시~~ (드론 메시로 완료) · ~~대기실 꾸미기~~ (완료) — 2026-11-24.
+5. 크롤러 메시는 정적 메시라 애니메이션 없음 — 전용 스켈레탈 메시가 생기면 교체.

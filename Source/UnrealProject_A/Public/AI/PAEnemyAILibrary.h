@@ -86,6 +86,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "ProjectA|AI")
 	static void SetRobotEye(AActor* Enemy, EPARobotEyeState State);
 
+	/**
+	 * 메크 코어 노출 표시: 가슴(spine_03 뼈, 없으면 몸 앞)에 주황 발광 구체 + 불빛을 켜고 끈다.
+	 * VentCore 카드가 노출 시작/끝에 부른다. 피해 2배는 카드가 따로 건다.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "ProjectA|AI")
+	static void SetCoreExposed(AActor* Enemy, bool bExposed);
+
 	/** 설정된 시간이 지나면 눈을 Idle로 되돌린다 (기절 종료 등). */
 	static void SetRobotEyeForSeconds(AActor* Enemy, EPARobotEyeState State, float Seconds);
 };

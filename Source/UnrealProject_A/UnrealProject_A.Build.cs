@@ -20,6 +20,6 @@ public class UnrealProject_A : ModuleRules
 			"UMG"
 		});
 
-		PrivateDependencyModuleNames.AddRange(new string[] { "NetCore", "Slate", "SlateCore" });
+		PrivateDependencyModuleNames.AddRange(new string[] { "NetCore", "Slate", "SlateCore", "Niagara" });
 	}
 }
