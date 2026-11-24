@@ -13,7 +13,8 @@
 | 에디터 BP 연결 (§4) | **완료** (2026-11-24, 집 PC) — `인계_로봇적AI_구현.md` 1절 |
 | PIE 테스트 (§5) | 시작·런타임 오류만 확인, 전투 동작은 플레이 확인 필요 |
 | 로봇 적 AI 구현 | **완료** — `인계_로봇적AI_구현.md` |
-| 미정 결정 6개 (§8) | 답 대기 |
+| 결정 6개 (§8) | **확정** (기본값 유지, 2026-11-24) |
+| 콘텐츠·외형 (§4-6) | **완료, 커밋함** — 진화 외형, 스킬 이펙트, 패시브 4종, 크롤러·메크 코어, 대기실 장면 |
 
 ---
 
@@ -154,6 +155,20 @@ git lfs pull                    # 에셋 실물 받기
 - 가해자 없는 피해(크롤러 자폭) 안전 처리: C++ `GetInstigatorPawnSafe`/`GetDamageSourceLocation`/`IsPlayerInstigator`, `GetCardPawn`(카드에서 폰을 지연 뒤에도 안전하게). `BP_Enemy` 피격 보고·`ShowHitFeedback`, `BPC_Action_SelfDestruct` Explode/Abort가 이것을 쓴다. 안드로이드 오버드라이브 카드는 `bUninterruptible`(0.1초마다 재시작하던 문제).
 - 옛 BP Q(슬로우 `UseSlowTime`)/E(예지 `UseForesight`): `IMC_Weapons`에서 Q·E 매핑만 지웠다(BP 노드는 남아 있지만 키가 없어 안 불린다). 화면 아래 옛 Q/E 상자(`UI_ShooterBulletCounter`의 `SkillHUD`)는 Collapsed.
 
+### 4-6. 콘텐츠·외형 — **완료 (2026-11-24 밤)**
+- **진화 형태 외형**: `FPAGrowthForm`에 `WeaponMesh`(스켈레탈)·`GlowColor`·`WeaponScale` 추가. `UPAGrowthWeaponComponent::ApplyFormLook`이 형태가 바뀔 때 총 메시·크기를 바꾸고 발광 오버레이(`/Game/FX/M_GrowthGlow`, 반투명 Fresnel, `GlowColor`·`GlowOpacity` 파라미터)를 씌운다. 표는 `PAProjectSettings.cpp`:
+  | 형태 | 메시 | 발광 |
+  |---|---|---|
+  | Seed | 그대로 | 옅은 파랑 |
+  | Swarm / Lance / Hive / Rail | 라이플 (×0.95 / 1.1 / 1 / 1.2) | 초록 / 파랑 / 노랑 / 보라 |
+  | Scatter / Breaker | `SKM_GrenadeLauncher` (×1 / 1.1) | 주황 / 빨강 |
+- **스킬 이펙트·소리** (`PAModuleAbilities.cpp` `SkillFx`, 디버그 도형 제거): 블레이드 = 불꽃 `NS_HitSpark`+서보음, 미사일 = 발사 섬광·발사음 → 폭발 `NS_GrenadeBlast`+폭발음, 대시 = 발밑 섬광+드론 소리, 침투 데크 = 불꽃+회로음(실패 시 거부음), 신경 가속기 = 시작/끝 회로음. `Build.cs`에 `Niagara` 추가.
+- **새 패시브 4종** (무료 아님, 상점): 팔 `Arm.Grip`(재장전 −25%), 다리 `Leg.Shock`(실드 +20·이동 +5%), 뇌 `Brain.Target`(약점 +30%·피해 +5%), 뇌 `Brain.Adrenal`(피해 +12%).
+- **크롤러 외형**: 드론 메시 `SM_AerisUndeployed` ×2.2. `BP_Enemy_Crawler`의 BP 변수 `ProfileBodyMesh`(StaticMesh)·`ProfileBodyScale`을 `UPACombatProfileComponent::ApplyBodyMesh`가 읽어 캐릭터 메시를 숨기고 붙인다(캡슐 바닥 정렬). 다른 적도 같은 변수만 넣으면 된다. 눈 불빛은 이 메시에 붙는다.
+- **메크 코어 약점 표시**: `UPAEnemyAILibrary::SetCoreExposed` — 가슴(`spine_03`)에 주황 발광 구체+불빛. `BPC_Action_VentCore`가 노출 시작(TelegraphOwner 뒤)에 켜고 CloseCore 시작에 끈다.
+- **대기실 레벨 꾸미기**: `LV_Lobby`에 일본 골목 벽·바닥·소품·포스터·드론(아웃라이너 `Lobby` 폴더), 네온 점광원 3개(자홍·시안·주황), 해 질 녘 조명. 카메라 `Lobby_Camera`(Actor Tag `LobbyCamera`)를 `APALobbyGameMode::BeginPlay`가 시점으로 잡는다. 대기실 바탕(alpha 0.25)·패널(0.72)을 반투명으로 해서 장면이 비친다. World Settings GameMode Override = `PALobbyGameMode`(레벨에서 바로 PIE 가능).
+- 확인: 빌드 성공, 대기실·MainLevel PIE 런타임 오류 0. 대기실 화면은 캡처로 확인. **크롤러·메크 코어·진화 외형·스킬 이펙트는 전투에서 직접 봐야 함(아직 눈으로 확인 안 함).**
+
 ## 5. 테스트 체크리스트 (빌드 후)
 - [ ] 대기실: 세팅에서 칸 선택 → 모듈 장착/해제, 연산력 초과 시 버튼이 "연산력 부족"으로 잠김, 같은 모듈 두 칸 금지
 - [ ] 상점: 크레드 부족 시 구매 잠김, 연산력 확장 후 최대치 증가
@@ -163,6 +178,7 @@ git lfs pull                    # 에셋 실물 받기
 - [ ] 대기실 세팅: 스킬 칸에 패시브가 안 보이고, 부위 칸에 스킬이 안 보임
 - [ ] 로봇(Mech)에 9mm vs 철갑탄 피해 차이, 엘리트 실드 재생
 - [ ] 사망 → 대기실 기록에 정산(50%) 표시
+- [ ] 진화 후 총 모양·발광 색 변화(`PA.GrowthXp 270`), 크롤러가 드론 모양, 메크 갑옷 파괴 시 가슴 주황 구체, Q·E 스킬 불꽃·소리
 
 ## 6. 검증 상태
 - **빌드 성공(2026-11-24, 에디터 타깃 Win64 Development).** 첫 빌드에서 걸린 것은 `PALobbyWidget.cpp` 하나였다 — 보조 함수 `CategoryName`과 지역 변수 `Slot`이 `UWidget`의 같은 이름 멤버를 가려서(C2248/C4458) 각각 `PACategoryLabel`·`ModSlot`으로 바꿨다. 나머지 24개 파일은 처음부터 통과했다. **PIE 실행은 아직 안 했다** — 이 워크트리에는 에셋(LFS)이 없다.
@@ -178,13 +194,12 @@ git lfs pull                    # 에셋 실물 받기
 - 재화는 각 머신 로컬(협동 시 개인/공유 미정). 킬 보상은 서버(호스트)에서만 쌓인다 → 협동 클라이언트는 재화가 안 쌓임.
 - 모듈 장착은 LAN에서 클라이언트가 자기 장착 정보를 서버에 보낸다(`Server_SubmitLoadout`). 보유 여부 검증은 하지 않는다(LAN 신뢰 전제).
 - 출진/대기실 이동은 리슨 서버면 `ServerTravel`(같이 이동), 아니면 `OpenLevel`.
-- 근접·미사일·해킹은 애니메이션/이펙트 없이 디버그 도형만 그린다(개발 빌드).
+- 스킬은 이펙트·소리만 있고 1인칭 애니메이션은 없다.
 - 모듈 정의를 ini로 둔 이유: LFS 바이너리 병합 불가. 아이콘 등 에셋이 필요해지면 DataAsset으로 옮길 수 있게 구조체를 그대로 쓰면 된다.
 - 대기실·HUD·진화 창은 코드 UI다. 디자인을 손보려면 `APALobbyPlayerController.LobbyWidgetClass`에 UMG BP를 넣고, HUD/진화 창은 각 컴포넌트의 `bShowBuiltIn*`를 끄고 BP로 만든다.
-- 달리기 BP가 `MaxWalkSpeed`를 직접 덮어서 서보 근섬유 이동속도 보너스가 사라진다(§4-1의 ⚠).
-- 진화 형태별 무기 BP(외형)는 없다. 설정의 `WeaponClass`가 비어 있으면 수치만 바뀌고 외형은 그대로다.
+- 진화 형태별 무기 BP는 없다. 외형은 같은 무기 BP의 메시·크기·발광만 바꾼다(§4-6). 발사음·반동은 그대로.
 
-## 8. 미정 결정 (답이 나오면 설정 기본값·문서를 갱신)
+## 8. 결정 사항 (2026-11-24 확정: 아래 기본값 그대로 간다)
 
 | # | 질문 | 지금 기본값 | 근거 문서 |
 |---|---|---|---|
@@ -199,5 +214,5 @@ git lfs pull                    # 에셋 실물 받기
 1. §4 BP 연결 + §5 PIE 확인 — 이게 돼야 나머지 수치를 체감으로 잡을 수 있다.
 2. 실제 방당 적 수·엘리트 비율을 재서 `기획_경제시뮬레이션_가안.md`의 '보통 방' 가정 교체 → Lv7(2차 진화) 도달 공급량 재조정.
 3. 로봇 적 AI: `기획_로봇적AI_설계.md`의 새 월드 상태(`shieldDown`/`armorBroken`/`coreExposed`)를 `PACombatProfileComponent`의 `OnLayerBroken`/`OnShieldRestored`에 연결하고 카드(RechargeShield·Overdrive·Suppress·Advance·Stomp·VentCore) 구현.
-4. 진화 형태별 무기 BP(1차 3종 + 2차 3종)와 스킬 애니메이션·이펙트.
+4. ~~진화 외형·스킬 이펙트~~ (§4-6 완료). 남은 것: 형태별 발사음·반동, 스킬 1인칭 애니메이션.
 5. 신경 가속기 협동 대응(전역 시간 배율 → 개인 배율).

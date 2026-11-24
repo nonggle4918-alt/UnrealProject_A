@@ -102,6 +102,8 @@ protected:
 private:
 	void InitializeProfile();
 	void SpawnDefenseBar();
+	/** BP 변수 ProfileBodyMesh(스태틱 메시)가 있으면 캐릭터 메시를 숨기고 그 메시를 몸으로 붙인다 (예: 크롤러 = 접힌 드론). */
+	void ApplyBodyMesh(const AActor* ClassDefaults);
 	static inline const FName HPWidgetName = TEXT("HPWidget");
 	static constexpr float DefenseBarFallbackHeight = 120.f;
 	void ApplyTags();

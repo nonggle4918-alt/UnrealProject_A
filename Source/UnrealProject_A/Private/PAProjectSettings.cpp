@@ -193,6 +193,33 @@ UPAProjectSettings::UPAProjectSettings()
 		AddStat(M, TEXT("MaxShield"), 40.f);
 		Modules.Add(M);
 	}
+	// 패시브 추가분 [제안] (2026-11-24): 부위 칸을 채울 선택지. 기존 능력치만 쓴다.
+	{
+		FPAModuleDefinition M = MakeModule(TEXT("Arm.Grip"), TEXT("탄창 교환 보조 팔"),
+			TEXT("재장전 시간 ×0.75."), EPAModuleCategory::Arm, 2, 250, false);
+		AddStat(M, TEXT("ReloadMult"), -0.25f);
+		Modules.Add(M);
+	}
+	{
+		FPAModuleDefinition M = MakeModule(TEXT("Leg.Shock"), TEXT("충격 흡수 무릎"),
+			TEXT("실드 +20, 이동 속도 +5%."), EPAModuleCategory::Leg, 2, 300, false);
+		AddStat(M, TEXT("MaxShield"), 20.f);
+		AddStat(M, TEXT("MoveSpeedMult"), 0.05f);
+		Modules.Add(M);
+	}
+	{
+		FPAModuleDefinition M = MakeModule(TEXT("Brain.Target"), TEXT("표적 연산 칩"),
+			TEXT("약점 배율 +0.3, 모든 피해 +5%."), EPAModuleCategory::Brain, 3, 400, false);
+		AddStat(M, TEXT("WeakpointBonus"), 0.3f);
+		AddStat(M, TEXT("DamageMult"), 0.05f);
+		Modules.Add(M);
+	}
+	{
+		FPAModuleDefinition M = MakeModule(TEXT("Brain.Adrenal"), TEXT("전투 흥분 칩"),
+			TEXT("모든 피해 +12%."), EPAModuleCategory::Brain, 4, 500, false);
+		AddStat(M, TEXT("DamageMult"), 0.12f);
+		Modules.Add(M);
+	}
 
 	// 총기 해금 [제안]: 회의의 "개조에 따른 총기 해금"을 모듈 보유 조건으로 연결.
 	{
@@ -229,6 +256,35 @@ UPAProjectSettings::UPAProjectSettings()
 		MakeForm(TEXT("Gun.Breaker"), TEXT("파쇄형"), TEXT("산탄형의 끝. 폭발 슬러그로 근거리 로봇 장갑까지 부순다."), TEXT("Gun.Scatter"), 7, TEXT("Explosive"), 1.3f, 0.6f, 0, 1.25f),
 		MakeForm(TEXT("Gun.Rail"), TEXT("레일형"), TEXT("관통형의 끝. 느리지만 한 발이 무겁다. 약점 저격용."), TEXT("Gun.Lance"), 7, TEXT("AP"), 2.6f, 0.5f, 0, 3.0f),
 	};
+
+	// 성장형 총 외형 [제안]: 메시 3종(소총·유탄발사기 + 원래) × 발광색 × 크기로 갈래를 구분한다.
+	// 갈래 색: 군집 = 초록, 산탄 = 주황, 관통 = 파랑. 2차는 같은 계열을 더 밝게.
+	{
+		const TCHAR* RifleMesh = TEXT("/Game/Weapons/Rifle/Meshes/SKM_Rifle.SKM_Rifle");
+		const TCHAR* LauncherMesh = TEXT("/Game/Weapons/GrenadeLauncher/Meshes/SKM_GrenadeLauncher.SKM_GrenadeLauncher");
+		struct FLook { const TCHAR* Id; const TCHAR* Mesh; FLinearColor Glow; float Scale; };
+		const FLook Looks[] = {
+			{ TEXT("Gun.Seed"),    nullptr,      FLinearColor(0.6f, 0.7f, 1.0f),  1.0f  },
+			{ TEXT("Gun.Swarm"),   RifleMesh,    FLinearColor(0.2f, 3.0f, 0.4f),  0.95f },
+			{ TEXT("Gun.Scatter"), LauncherMesh, FLinearColor(3.0f, 1.0f, 0.1f),  1.0f  },
+			{ TEXT("Gun.Lance"),   RifleMesh,    FLinearColor(0.2f, 1.0f, 4.0f),  1.1f  },
+			{ TEXT("Gun.Hive"),    RifleMesh,    FLinearColor(3.0f, 4.0f, 0.2f),  1.0f  },
+			{ TEXT("Gun.Breaker"), LauncherMesh, FLinearColor(6.0f, 0.4f, 0.1f),  1.1f  },
+			{ TEXT("Gun.Rail"),    RifleMesh,    FLinearColor(2.5f, 0.4f, 6.0f),  1.2f  },
+		};
+		for (const FLook& L : Looks)
+		{
+			for (FPAGrowthForm& F : GrowthForms)
+			{
+				if (F.Id == FName(L.Id))
+				{
+					F.WeaponMesh = L.Mesh ? TSoftObjectPtr<USkeletalMesh>(FSoftObjectPath(L.Mesh)) : nullptr;
+					F.GlowColor = L.Glow;
+					F.WeaponScale = L.Scale;
+				}
+			}
+		}
+	}
 	GrowthXpPerLevel = { 60, 90, 120, 150, 180, 210, 240, 270, 300 }; // 최대 레벨 10
 
 	RunMap = FSoftObjectPath(TEXT("/Game/Level/MainLevel_Random.MainLevel_Random"));

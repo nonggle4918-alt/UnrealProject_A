@@ -1,6 +1,9 @@
 #include "AI/PAEnemyAILibrary.h"
 
 #include "Components/PointLightComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "Engine/StaticMesh.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
 #include "Components/ActorComponent.h"
@@ -115,7 +118,25 @@ namespace PAEnemyAI
 		const ACharacter* Character = Cast<ACharacter>(Enemy);
 		USkeletalMeshComponent* Mesh = Character ? Character->GetMesh() : nullptr;
 		const FName HeadBone = ReadHeadBone(Enemy);
-		if (Mesh && HeadBone != NAME_None && Mesh->DoesSocketExist(HeadBone))
+		// 몸을 스태틱 메시로 바꾼 적(크롤러)은 그 몸 위에 붙인다.
+		USceneComponent* CustomBody = nullptr;
+		TArray<USceneComponent*> Scene;
+		Enemy->GetComponents(Scene);
+		for (USceneComponent* C : Scene)
+		{
+			if (C && C->GetFName() == TEXT("PABodyMesh"))
+			{
+				CustomBody = C;
+				break;
+			}
+		}
+		if (CustomBody)
+		{
+			const FBoxSphereBounds B = CustomBody->Bounds;
+			Light->SetupAttachment(CustomBody);
+			Light->SetWorldLocation(B.Origin + Enemy->GetActorForwardVector() * B.BoxExtent.X + FVector(0.f, 0.f, B.BoxExtent.Z * 0.3f));
+		}
+		else if (Mesh && HeadBone != NAME_None && Mesh->DoesSocketExist(HeadBone))
 		{
 			Light->SetupAttachment(Mesh, HeadBone);
 			Light->SetRelativeLocation(FVector(0.f, 12.f, 0.f));
@@ -129,6 +150,96 @@ namespace PAEnemyAI
 		Enemy->AddInstanceComponent(Light);
 		return Light;
 	}
+}
+
+namespace PAEnemyCore
+{
+	const FName CoreTag(TEXT("RobotCore"));
+	const FName CoreBone(TEXT("spine_03"));
+	const TCHAR* SphereMeshPath = TEXT("/Engine/BasicShapes/Sphere.Sphere");
+	const TCHAR* GlowMaterialPath = TEXT("/Game/FX/M_GrowthGlow.M_GrowthGlow");
+	const FLinearColor CoreColor(8.f, 2.5f, 0.2f);
+	const FVector FallbackOffset(35.f, 0.f, 20.f);
+	constexpr float CoreScale = 0.45f;
+	constexpr float CoreLightIntensity = 8000.f;
+	constexpr float CoreLightRadius = 300.f;
+
+	/** 코어 구체·불빛을 만든다(처음 한 번). */
+	void CreateCore(AActor* Enemy, UStaticMeshComponent*& OutOrb, UPointLightComponent*& OutLight)
+	{
+		USceneComponent* Parent = Enemy->GetRootComponent();
+		FName Socket = NAME_None;
+		FVector Offset = FallbackOffset;
+		const ACharacter* Character = Cast<ACharacter>(Enemy);
+		if (USkeletalMeshComponent* Mesh = Character ? Character->GetMesh() : nullptr)
+		{
+			if (Mesh->DoesSocketExist(CoreBone))
+			{
+				Parent = Mesh;
+				Socket = CoreBone;
+				Offset = FVector(0.f, 20.f, 0.f); // 가슴 앞쪽
+			}
+		}
+
+		OutOrb = NewObject<UStaticMeshComponent>(Enemy, TEXT("RobotCoreOrb"));
+		OutOrb->ComponentTags.Add(CoreTag);
+		OutOrb->SetStaticMesh(LoadObject<UStaticMesh>(nullptr, SphereMeshPath));
+		if (UMaterialInterface* Glow = LoadObject<UMaterialInterface>(nullptr, GlowMaterialPath))
+		{
+			UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(Glow, OutOrb);
+			MID->SetVectorParameterValue(TEXT("GlowColor"), CoreColor);
+			MID->SetScalarParameterValue(TEXT("GlowOpacity"), 1.f);
+			OutOrb->SetMaterial(0, MID);
+		}
+		OutOrb->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		OutOrb->SetCastShadow(false);
+		OutOrb->SetupAttachment(Parent, Socket);
+		OutOrb->SetRelativeLocation(Offset);
+		OutOrb->SetWorldScale3D(FVector(CoreScale));
+		OutOrb->RegisterComponent();
+		Enemy->AddInstanceComponent(OutOrb);
+
+		OutLight = NewObject<UPointLightComponent>(Enemy, TEXT("RobotCoreLight"));
+		OutLight->ComponentTags.Add(CoreTag);
+		OutLight->SetIntensity(CoreLightIntensity);
+		OutLight->SetAttenuationRadius(CoreLightRadius);
+		OutLight->SetLightColor(FLinearColor(1.f, 0.4f, 0.05f));
+		OutLight->SetCastShadows(false);
+		OutLight->SetupAttachment(OutOrb);
+		OutLight->RegisterComponent();
+		Enemy->AddInstanceComponent(OutLight);
+	}
+}
+
+void UPAEnemyAILibrary::SetCoreExposed(AActor* Enemy, bool bExposed)
+{
+	if (!IsValid(Enemy) || Enemy->GetNetMode() == NM_DedicatedServer)
+	{
+		return;
+	}
+	UStaticMeshComponent* Orb = nullptr;
+	UPointLightComponent* Light = nullptr;
+	TArray<USceneComponent*> Comps;
+	Enemy->GetComponents(Comps);
+	for (USceneComponent* C : Comps)
+	{
+		if (C && C->ComponentHasTag(PAEnemyCore::CoreTag))
+		{
+			if (UStaticMeshComponent* AsOrb = Cast<UStaticMeshComponent>(C)) { Orb = AsOrb; }
+			if (UPointLightComponent* AsLight = Cast<UPointLightComponent>(C)) { Light = AsLight; }
+		}
+	}
+	if (!Orb && !bExposed)
+	{
+		return; // 아직 만든 적 없음
+	}
+	if (!Orb)
+	{
+		PAEnemyCore::CreateCore(Enemy, Orb, Light);
+	}
+	const bool bShow = bExposed && !PAEnemyAI::IsMarkedDead(Enemy);
+	if (Orb) { Orb->SetVisibility(bShow); }
+	if (Light) { Light->SetVisibility(bShow); }
 }
 
 // ---------- 토큰 저장소 ----------

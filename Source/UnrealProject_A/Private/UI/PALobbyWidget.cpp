@@ -121,6 +121,9 @@ void UPALobbyWidget::BuildFrame()
 	UOverlay* Root = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass());
 	WidgetTree->RootWidget = Root;
 
+	// 대기실 패널은 반투명 — 뒤의 골목 장면(LV_Lobby, LobbyCamera)이 비쳐 보이게.
+	const FLinearColor LobbyPanel(PAUI::Panel.R, PAUI::Panel.G, PAUI::Panel.B, 0.72f);
+
 	UBorder* Bg = PAUI::Box(WidgetTree, PAUI::Background, FMargin(40.f));
 	UOverlaySlot* BgSlot = Root->AddChildToOverlay(Bg);
 	BgSlot->SetHorizontalAlignment(HAlign_Fill);
@@ -130,7 +133,7 @@ void UPALobbyWidget::BuildFrame()
 	Bg->SetContent(Main);
 
 	// ---- 왼쪽 메뉴 ----
-	UBorder* MenuPanel = PAUI::Box(WidgetTree, PAUI::Panel, FMargin(18.f));
+	UBorder* MenuPanel = PAUI::Box(WidgetTree, LobbyPanel, FMargin(18.f));
 	UHorizontalBoxSlot* MenuSlot = Main->AddChildToHorizontalBox(MenuPanel);
 	MenuSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
 	UVerticalBox* Menu = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass());
@@ -152,7 +155,7 @@ void UPALobbyWidget::BuildFrame()
 	AddMenu(TEXT("기록"), [WeakThis]() { if (WeakThis.IsValid()) { WeakThis->ShowPage(EPALobbyPage::Home); } });
 
 	// ---- 오른쪽 본문 ----
-	UBorder* BodyPanel = PAUI::Box(WidgetTree, PAUI::Panel, FMargin(24.f));
+	UBorder* BodyPanel = PAUI::Box(WidgetTree, LobbyPanel, FMargin(24.f));
 	UHorizontalBoxSlot* BodySlot = Main->AddChildToHorizontalBox(BodyPanel);
 	BodySlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
 	BodySlot->SetPadding(FMargin(20.f, 0.f, 0.f, 0.f));

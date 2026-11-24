@@ -4,8 +4,10 @@
 #include "Combat/PADamageLibrary.h"
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
-#include "DrawDebugHelpers.h"
 #include "Engine/Engine.h"
+#include "NiagaraFunctionLibrary.h"
+#include "NiagaraSystem.h"
+#include "Sound/SoundBase.h"
 #include "Engine/OverlapResult.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
@@ -116,6 +118,48 @@ namespace
 		return nullptr;
 	}
 
+	/** 스킬 이펙트·소리 (프로젝트에 있는 FX·드론 사운드 재사용). 실행된 머신에서만 보인다. */
+	namespace SkillFx
+	{
+		const TCHAR* HitSpark = TEXT("/Game/FX/NS_HitSpark.NS_HitSpark");
+		const TCHAR* Blast = TEXT("/Game/FX/NS_GrenadeBlast.NS_GrenadeBlast");
+		const TCHAR* Muzzle = TEXT("/Game/AdvancedCompanionDroneSystem/Particles/NS_MuzzleFlash.NS_MuzzleFlash");
+		const TCHAR* SndSwing = TEXT("/Game/AdvancedCompanionDroneSystem/Sounds/Cues/SC_Servo.SC_Servo");
+		const TCHAR* SndMissile = TEXT("/Game/AdvancedCompanionDroneSystem/Sounds/Cues/SC_SkillShotGun1.SC_SkillShotGun1");
+		const TCHAR* SndExplosion = TEXT("/Game/AdvancedCompanionDroneSystem/Sounds/Cues/SC_SmallExplosion.SC_SmallExplosion");
+		const TCHAR* SndDash = TEXT("/Game/AdvancedCompanionDroneSystem/Sounds/Cues/SC_DroneDeploying.SC_DroneDeploying");
+		const TCHAR* SndHack = TEXT("/Game/AdvancedCompanionDroneSystem/Sounds/Cues/SC_SCircuit2.SC_SCircuit2");
+		const TCHAR* SndDenied = TEXT("/Game/AdvancedCompanionDroneSystem/Sounds/Cues/SC_Denied.SC_Denied");
+		const TCHAR* SndSlowStart = TEXT("/Game/AdvancedCompanionDroneSystem/Sounds/Cues/SC_SCircuit1.SC_SCircuit1");
+		const TCHAR* SndSlowEnd = TEXT("/Game/AdvancedCompanionDroneSystem/Sounds/Cues/SC_CooldownEnd.SC_CooldownEnd");
+
+		void Spawn(const UObject* Context, const TCHAR* Path, const FVector& Location, const FRotator& Rotation = FRotator::ZeroRotator, float Scale = 1.f)
+		{
+			UWorld* World = Context ? Context->GetWorld() : nullptr;
+			if (!World || World->GetNetMode() == NM_DedicatedServer)
+			{
+				return;
+			}
+			if (UNiagaraSystem* System = LoadObject<UNiagaraSystem>(nullptr, Path))
+			{
+				UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, System, Location, Rotation, FVector(Scale));
+			}
+		}
+
+		void Sound(const UObject* Context, const TCHAR* Path, const FVector& Location, float Volume = 1.f)
+		{
+			UWorld* World = Context ? Context->GetWorld() : nullptr;
+			if (!World || World->GetNetMode() == NM_DedicatedServer)
+			{
+				return;
+			}
+			if (USoundBase* Snd = LoadObject<USoundBase>(nullptr, Path))
+			{
+				UGameplayStatics::PlaySoundAtLocation(World, Snd, Location, Volume);
+			}
+		}
+	}
+
 	void ShowLocalSkillMessage(const APawn* Pawn, const FString& Message)
 	{
 		if (GEngine && Pawn && Pawn->IsLocallyControlled())
@@ -175,6 +219,7 @@ void UPAGA_Melee::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const
 			continue;
 		}
 		UPADamageLibrary::DealAmmoDamage(Target, Settings->MeleeBaseDamage, Settings->MeleeAmmoId, Pawn, Pawn, /*bIsMelee*/ true);
+		SkillFx::Spawn(Pawn, SkillFx::HitSpark, Target->GetActorLocation() + FVector(0.f, 0.f, 40.f), (-ToTarget).Rotation(), 1.5f);
 		++HitCount;
 
 		if (Knockback > 0.f)
@@ -187,9 +232,7 @@ void UPAGA_Melee::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const
 		}
 	}
 
-#if ENABLE_DRAW_DEBUG
-	DrawDebugSphere(Pawn->GetWorld(), Center, Radius, 12, HitCount > 0 ? FColor::Red : FColor::White, false, 0.25f);
-#endif
+	SkillFx::Sound(Pawn, SkillFx::SndSwing, Center, HitCount > 0 ? 1.f : 0.6f);
 
 	StartCooldown();
 	EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
@@ -256,6 +299,8 @@ void UPAGA_MicroMissile::FireOne()
 	{
 		Missile->Init(ShotDamage, ShotRadius);
 	}
+	SkillFx::Spawn(Pawn, SkillFx::Muzzle, SpawnLoc, Spread.Rotation(), 1.5f);
+	SkillFx::Sound(Pawn, SkillFx::SndMissile, SpawnLoc, 0.8f);
 
 	--RemainingShots;
 	if (RemainingShots <= 0)
@@ -354,9 +399,8 @@ void APAMicroMissileProjectile::Explode(const FVector& Location)
 		}
 	}
 
-#if ENABLE_DRAW_DEBUG
-	DrawDebugSphere(GetWorld(), Location, Radius, 16, FColor::Orange, false, 0.4f);
-#endif
+	SkillFx::Spawn(this, SkillFx::Blast, Location, FRotator::ZeroRotator, FMath::Clamp(Radius / 400.f, 0.3f, 1.5f));
+	SkillFx::Sound(this, SkillFx::SndExplosion, Location);
 	Destroy();
 }
 
@@ -390,6 +434,9 @@ void UPAGA_ThrusterDash::ActivateAbility(const FGameplayAbilitySpecHandle Handle
 	}
 	Dir = Dir.GetSafeNormal();
 	Character->LaunchCharacter(Dir * Speed + FVector(0.f, 0.f, 150.f), true, true);
+	const FVector Feet = Character->GetActorLocation() - FVector(0.f, 0.f, Character->GetSimpleCollisionHalfHeight() * 0.8f);
+	SkillFx::Spawn(Character, SkillFx::Muzzle, Feet, (-Dir).Rotation(), 2.5f);
+	SkillFx::Sound(Character, SkillFx::SndDash, Feet);
 
 	StartCooldown();
 	EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
@@ -416,6 +463,7 @@ void UPAGA_NeuralAccelerator::ActivateAbility(const FGameplayAbilitySpecHandle H
 	const float RealDuration = (Def && Def->Param2 > 0.f) ? Def->Param2 : 4.f;
 
 	UGameplayStatics::SetGlobalTimeDilation(Pawn, WorldSpeed);
+	SkillFx::Sound(Pawn, SkillFx::SndSlowStart, Pawn->GetActorLocation());
 	Pawn->CustomTimeDilation = 1.f / WorldSpeed; // 시전자는 정상 속도
 	bApplied = true;
 	DilatedWorld = Pawn->GetWorld();
@@ -428,6 +476,10 @@ void UPAGA_NeuralAccelerator::ActivateAbility(const FGameplayAbilitySpecHandle H
 
 void UPAGA_NeuralAccelerator::Restore()
 {
+	if (const APawn* Pawn = DilatedPawn.Get())
+	{
+		SkillFx::Sound(Pawn, SkillFx::SndSlowEnd, Pawn->GetActorLocation());
+	}
 	K2_EndAbility();
 }
 
@@ -475,6 +527,10 @@ void UPAGA_Breach::ActivateAbility(const FGameplayAbilitySpecHandle Handle, cons
 	{
 		// 대상이 없으면 쿨다운 없이 끝낸다.
 		ShowLocalSkillMessage(Pawn, TEXT("침투 데크: 조준한 적이 없음"));
+		if (Pawn)
+		{
+			SkillFx::Sound(Pawn, SkillFx::SndDenied, Pawn->GetActorLocation(), 0.6f);
+		}
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
 	}
@@ -497,11 +553,8 @@ void UPAGA_Breach::ActivateAbility(const FGameplayAbilitySpecHandle Handle, cons
 		ShowLocalSkillMessage(Pawn, FString::Printf(TEXT("침투 데크: 사람 — 회로 피해 %.0f (기절은 로봇만)"), HumanDamage));
 	}
 
-#if ENABLE_DRAW_DEBUG
-	FVector Eye, Dir;
-	GetAimPoint(Eye, Dir);
-	DrawDebugLine(Pawn->GetWorld(), Eye + Dir * 30.f, Hit.ImpactPoint, FColor::Cyan, false, 0.4f, 0, 1.5f);
-#endif
+	SkillFx::Spawn(Pawn, SkillFx::HitSpark, Target->GetActorLocation() + FVector(0.f, 0.f, 60.f), FRotator::ZeroRotator, 2.5f);
+	SkillFx::Sound(Pawn, SkillFx::SndHack, Target->GetActorLocation());
 
 	StartCooldown();
 	EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
