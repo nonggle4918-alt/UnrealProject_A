@@ -49,7 +49,7 @@ private:
 	void Sortie();
 
 	EPALobbyPage CurrentPage = EPALobbyPage::Home;
-	EPAModuleSlot SelectedSlot = EPAModuleSlot::LeftArm;
+	EPAModuleSlot SelectedSlot = EPAModuleSlot::SkillQ;
 
 	UPROPERTY()
 	TObjectPtr<UVerticalBox> Content;

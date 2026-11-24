@@ -249,6 +249,8 @@ void UPAModuleLoadoutComponent::OnRep_ActiveModules()
 void UPAModuleLoadoutComponent::BuildBindings()
 {
 	const UPAProjectSettings* Settings = UPAProjectSettings::Get();
+	// 스킬 키는 이 머신의 아웃게임 장착 칸(Q·E)이 정한다. 입력은 소유 클라이언트에서만 걸리므로 로컬 정보로 충분하다.
+	const UPAMetaProgressSubsystem* Meta = UPAMetaProgressSubsystem::Get(this);
 	Bindings.Reset();
 
 	if (bGrantMelee)
@@ -271,6 +273,13 @@ void UPAModuleLoadoutComponent::BuildBindings()
 		B.Key = Def->Id;
 		B.DisplayName = Def->DisplayName;
 		B.InputKey = Def->ActivationKey;
+		for (const EPAModuleSlot Slot : { EPAModuleSlot::SkillQ, EPAModuleSlot::SkillE })
+		{
+			if (Meta && Meta->GetEquipped(Slot) == ModuleId)
+			{
+				B.InputKey = UPAMetaProgressSubsystem::GetSkillSlotKey(Slot);
+			}
+		}
 		B.AbilityClass = Def->ActiveAbility.LoadSynchronous();
 		Bindings.Add(B);
 	}

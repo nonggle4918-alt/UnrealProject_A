@@ -1,5 +1,6 @@
 #include "Combat/PACombatProfileComponent.h"
 
+#include "AI/PAEnemyAILibrary.h"
 #include "AbilitySystemComponent.h"
 #include "Combat/PADamageLibrary.h"
 #include "Engine/World.h"
@@ -12,6 +13,8 @@
 #include "PAGameplayTags.h"
 #include "PAProjectSettings.h"
 #include "TimerManager.h"
+#include "Components/WidgetComponent.h"
+#include "UI/PAEnemyDefenseWidget.h"
 #include "Weapon/PAGrowthWeaponComponent.h"
 
 namespace
@@ -57,9 +60,46 @@ void UPACombatProfileComponent::BeginPlay()
 	ArmorHandle = AbilitySystem->GetGameplayAttributeValueChangeDelegate(UPAAttributeSet::GetArmorAttribute())
 		.AddUObject(this, &UPACombatProfileComponent::HandleArmorChanged);
 
+	// BP 클래스 기본값의 Actor Tags에 종족/등급 이름을 넣으면 컴포넌트 값보다 우선한다
+	// (부모에서 물려받은 컴포넌트 값을 자식 BP마다 고치지 않아도 되게).
+	if (const AActor* ClassDefaults = GetOwner()->GetClass()->GetDefaultObject<AActor>())
+	{
+		if (ClassDefaults->Tags.Contains(RaceActorTag(EPAEnemyRace::Robot)))
+		{
+			Race = EPAEnemyRace::Robot;
+		}
+		if (ClassDefaults->Tags.Contains(RankActorTag(EPAEnemyRank::Elite)))
+		{
+			Rank = EPAEnemyRank::Elite;
+		}
+		// BP 변수 ProfileMaxArmor / ProfileMaxShield(0 이상)가 있으면 방어층 덮어쓰기 (예: 크롤러 갑옷 0).
+		auto ReadClassFloat = [ClassDefaults](const TCHAR* Name, float& Out)
+		{
+			const FProperty* Prop = ClassDefaults->GetClass()->FindPropertyByName(Name);
+			if (const FDoubleProperty* D = CastField<FDoubleProperty>(Prop))
+			{
+				const double V = D->GetPropertyValue_InContainer(ClassDefaults);
+				if (V >= 0.0) { Out = static_cast<float>(V); }
+			}
+			else if (const FFloatProperty* F = CastField<FFloatProperty>(Prop))
+			{
+				const float V = F->GetPropertyValue_InContainer(ClassDefaults);
+				if (V >= 0.f) { Out = V; }
+			}
+		};
+		ReadClassFloat(TEXT("ProfileMaxArmor"), OverrideMaxArmor);
+		ReadClassFloat(TEXT("ProfileMaxShield"), OverrideMaxShield);
+	}
+
 	ApplyTags();
 
 	GetOwner()->OnTakeAnyDamage.AddDynamic(this, &UPACombatProfileComponent::HandleTakeAnyDamage);
+
+	// 적 머리 위 실드·갑옷 막대 (화면 표시라 서버 전용 프로세스에서는 만들지 않는다).
+	if (bGrantKillRewards && GetNetMode() != NM_DedicatedServer)
+	{
+		SpawnDefenseBar();
+	}
 
 	// BP의 BeginPlay(InitHealth)가 먼저 돌도록 다음 프레임에 방어층을 채운다.
 	if (GetOwner()->HasAuthority())
@@ -98,6 +138,46 @@ void UPACombatProfileComponent::SetProfile(EPAEnemyRace NewRace, EPAEnemyRank Ne
 	}
 }
 
+void UPACombatProfileComponent::SpawnDefenseBar()
+{
+	AActor* Owner = GetOwner();
+	USceneComponent* AttachTo = Owner->GetRootComponent();
+	FVector Offset(0.f, 0.f, DefenseBarFallbackHeight);
+
+	// BP의 체력 막대(HPWidget)가 있으면 그 위치에 붙여 바로 위로 띄운다.
+	TArray<UWidgetComponent*> Widgets;
+	Owner->GetComponents(Widgets);
+	for (UWidgetComponent* W : Widgets)
+	{
+		if (W && W->GetFName() == HPWidgetName)
+		{
+			AttachTo = W;
+			Offset = FVector::ZeroVector;
+			break;
+		}
+	}
+	if (!AttachTo)
+	{
+		return;
+	}
+
+	UWidgetComponent* Comp = NewObject<UWidgetComponent>(Owner, TEXT("PADefenseBar"));
+	Comp->SetWidgetSpace(EWidgetSpace::Screen);
+	Comp->SetWidgetClass(UPAEnemyDefenseWidget::StaticClass());
+	Comp->SetDrawSize(UPAEnemyDefenseWidget::GetDrawSize());
+	Comp->SetPivot(FVector2D(0.5f, 1.4f)); // 아래 끝이 체력 막대 위쪽에 닿게
+	Comp->SetupAttachment(AttachTo);
+	Comp->SetRelativeLocation(Offset);
+	Comp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Comp->RegisterComponent();
+	Owner->AddInstanceComponent(Comp);
+	Comp->InitWidget();
+	if (UPAEnemyDefenseWidget* Bar = Cast<UPAEnemyDefenseWidget>(Comp->GetUserWidgetObject()))
+	{
+		Bar->SetOwnerActor(Owner);
+	}
+}
+
 void UPACombatProfileComponent::InitializeProfile()
 {
 	if (!AbilitySystem || !GetOwner())
@@ -105,6 +185,7 @@ void UPACombatProfileComponent::InitializeProfile()
 		return;
 	}
 	ApplyDefenseLayers();
+	UPAEnemyAILibrary::SetRobotEye(GetOwner(), EPARobotEyeState::Idle);
 }
 
 void UPACombatProfileComponent::ApplyTags()
@@ -197,6 +278,7 @@ void UPACombatProfileComponent::HandleHealthChanged(const FOnAttributeChangeData
 	}
 
 	bDead = true;
+	UPAEnemyAILibrary::SetRobotEye(GetOwner(), EPARobotEyeState::Off);
 
 	AActor* Killer = nullptr;
 	const AActor* Causer = nullptr;
@@ -264,6 +346,45 @@ void UPACombatProfileComponent::HandleTakeAnyDamage(AActor* DamagedActor, float 
 	}
 }
 
+namespace PABrainFacts
+{
+	const FName ShieldDown(TEXT("shieldDown"));
+	const FName ArmorBroken(TEXT("armorBroken"));
+	const FName SetWorldFactFunc(TEXT("SetWorldFact"));
+}
+
+void UPACombatProfileComponent::PushBrainFact(FName Key, bool bValue) const
+{
+	// GOAP 두뇌(AIC_Enemy BP)의 SetWorldFact(Key, Value)를 이름으로 부른다 — BP 바인딩 없이 모든 적에 적용.
+	const APawn* Pawn = Cast<APawn>(GetOwner());
+	AController* Controller = Pawn ? Pawn->GetController() : nullptr;
+	UFunction* Func = Controller ? Controller->FindFunction(PABrainFacts::SetWorldFactFunc) : nullptr;
+	if (!Func)
+	{
+		return;
+	}
+	FNameProperty* KeyProp = FindFProperty<FNameProperty>(Func, TEXT("Key"));
+	FBoolProperty* ValueProp = FindFProperty<FBoolProperty>(Func, TEXT("Value"));
+	if (!KeyProp || !ValueProp)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Profile] %s.SetWorldFact has unexpected params"), *GetNameSafe(Controller));
+		return;
+	}
+	uint8* Params = static_cast<uint8*>(FMemory_Alloca(Func->ParmsSize));
+	FMemory::Memzero(Params, Func->ParmsSize);
+	for (TFieldIterator<FProperty> It(Func); It && It->HasAnyPropertyFlags(CPF_Parm); ++It)
+	{
+		It->InitializeValue_InContainer(Params);
+	}
+	KeyProp->SetPropertyValue_InContainer(Params, Key);
+	ValueProp->SetPropertyValue_InContainer(Params, bValue);
+	Controller->ProcessEvent(Func, Params);
+	for (TFieldIterator<FProperty> It(Func); It && It->HasAnyPropertyFlags(CPF_Parm); ++It)
+	{
+		It->DestroyValue_InContainer(Params);
+	}
+}
+
 void UPACombatProfileComponent::HandleShieldChanged(const FOnAttributeChangeData& Change)
 {
 	if (Change.NewValue < Change.OldValue)
@@ -273,6 +394,7 @@ void UPACombatProfileComponent::HandleShieldChanged(const FOnAttributeChangeData
 		{
 			bShieldBroken = true;
 			OnLayerBroken.Broadcast(true);
+			PushBrainFact(PABrainFacts::ShieldDown, true);
 		}
 	}
 }
@@ -285,6 +407,7 @@ void UPACombatProfileComponent::HandleArmorChanged(const FOnAttributeChangeData&
 		if (Change.NewValue <= 0.f && Change.OldValue > 0.f)
 		{
 			OnLayerBroken.Broadcast(false);
+			PushBrainFact(PABrainFacts::ArmorBroken, true);
 		}
 	}
 }
@@ -312,6 +435,7 @@ void UPACombatProfileComponent::TickShieldRegen()
 	{
 		bShieldBroken = false;
 		OnShieldRestored.Broadcast();
+		PushBrainFact(PABrainFacts::ShieldDown, false);
 	}
 }
 

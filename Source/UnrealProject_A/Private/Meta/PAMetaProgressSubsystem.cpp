@@ -1,6 +1,7 @@
 #include "Meta/PAMetaProgressSubsystem.h"
 
 #include "Engine/Engine.h"
+#include "InputCoreTypes.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
@@ -52,22 +53,56 @@ void UPAMetaProgressSubsystem::Load()
 		}
 	}
 
+	SanitizeLoadout();
 	GrantStartersIfNeeded();
+}
+
+void UPAMetaProgressSubsystem::SanitizeLoadout()
+{
+	const UPAProjectSettings* Settings = UPAProjectSettings::Get();
+	TArray<FName> Displaced;
+	for (auto It = Data->Loadout.CreateIterator(); It; ++It)
+	{
+		const FPAModuleDefinition* Def = Settings->FindModule(It.Value());
+		if (!Def || CheckSlotFit(It.Key(), *Def) != EPAEquipResult::Ok)
+		{
+			Displaced.Add(It.Value());
+			It.RemoveCurrent();
+		}
+	}
+	// 밀려난 스킬 모듈은 빈 스킬 칸에 다시 넣는다(연산력은 그대로라 초과할 일 없음).
+	// E칸부터 채운다: 옛 세이브의 침투 데크(해킹)가 E로 가고, 뒤이어 기본 지급되는 신경 가속기(슬로우)가 Q로 간다.
+	for (const FName& Id : Displaced)
+	{
+		const FPAModuleDefinition* Def = Settings->FindModule(Id);
+		for (const EPAModuleSlot Slot : { EPAModuleSlot::SkillE, EPAModuleSlot::SkillQ })
+		{
+			if (Def && !Data->Loadout.Contains(Slot) && CheckSlotFit(Slot, *Def) == EPAEquipResult::Ok)
+			{
+				Data->Loadout.Add(Slot, Id);
+				break;
+			}
+		}
+	}
+	if (Displaced.Num() > 0)
+	{
+		UE_LOG(LogTemp, Log, TEXT("[Meta] Loadout migrated: %d module(s) moved/removed for slot rules"), Displaced.Num());
+		Save();
+	}
 }
 
 void UPAMetaProgressSubsystem::GrantStartersIfNeeded()
 {
-	if (Data->bStarterGranted)
-	{
-		return;
-	}
+	// 기본 모듈은 무료라 매번 확인한다 → 나중에 기본 지급으로 바뀐 모듈(예: 신경 가속기)도 옛 세이브에 들어간다.
 	const UPAProjectSettings* Settings = UPAProjectSettings::Get();
+	bool bChanged = !Data->bStarterGranted;
 	for (const FPAModuleDefinition& Def : Settings->Modules)
 	{
-		if (!Def.bStarter)
+		if (!Def.bStarter || Data->OwnedModules.Contains(Def.Id))
 		{
 			continue;
 		}
+		bChanged = true;
 		Data->OwnedModules.AddUnique(Def.Id);
 
 		// 처음 한 번은 빈 칸에 자동 장착해 준다.
@@ -82,7 +117,10 @@ void UPAMetaProgressSubsystem::GrantStartersIfNeeded()
 		}
 	}
 	Data->bStarterGranted = true;
-	Save();
+	if (bChanged)
+	{
+		Save();
+	}
 }
 
 void UPAMetaProgressSubsystem::Save()
@@ -357,6 +395,35 @@ EPAModuleCategory UPAMetaProgressSubsystem::GetSlotCategory(EPAModuleSlot Slot)
 	}
 }
 
+bool UPAMetaProgressSubsystem::IsSkillSlot(EPAModuleSlot Slot)
+{
+	return Slot == EPAModuleSlot::SkillQ || Slot == EPAModuleSlot::SkillE;
+}
+
+FKey UPAMetaProgressSubsystem::GetSkillSlotKey(EPAModuleSlot Slot)
+{
+	switch (Slot)
+	{
+	case EPAModuleSlot::SkillQ: return EKeys::Q;
+	case EPAModuleSlot::SkillE: return EKeys::E;
+	default: return FKey();
+	}
+}
+
+EPAEquipResult UPAMetaProgressSubsystem::CheckSlotFit(EPAModuleSlot Slot, const FPAModuleDefinition& Def)
+{
+	const bool bActive = !Def.ActiveAbility.IsNull();
+	if (IsSkillSlot(Slot))
+	{
+		return bActive ? EPAEquipResult::Ok : EPAEquipResult::NotASkill;
+	}
+	if (bActive)
+	{
+		return EPAEquipResult::SkillSlotOnly;
+	}
+	return GetSlotCategory(Slot) == Def.Category ? EPAEquipResult::Ok : EPAEquipResult::WrongSlot;
+}
+
 EPAEquipResult UPAMetaProgressSubsystem::CanEquip(EPAModuleSlot Slot, FName ModuleId) const
 {
 	if (!Data)
@@ -376,9 +443,10 @@ EPAEquipResult UPAMetaProgressSubsystem::CanEquip(EPAModuleSlot Slot, FName Modu
 	{
 		return EPAEquipResult::NotOwned;
 	}
-	if (GetSlotCategory(Slot) != Def->Category)
+	const EPAEquipResult Fit = CheckSlotFit(Slot, *Def);
+	if (Fit != EPAEquipResult::Ok)
 	{
-		return EPAEquipResult::WrongSlot;
+		return Fit;
 	}
 	for (const TPair<EPAModuleSlot, FName>& Pair : Data->Loadout)
 	{

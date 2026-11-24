@@ -101,12 +101,19 @@ protected:
 
 private:
 	void InitializeProfile();
+	void SpawnDefenseBar();
+	static inline const FName HPWidgetName = TEXT("HPWidget");
+	static constexpr float DefenseBarFallbackHeight = 120.f;
 	void ApplyTags();
 	void ApplyDefenseLayers();
 	void HandleHealthChanged(const FOnAttributeChangeData& Change);
 	void HandleShieldChanged(const FOnAttributeChangeData& Change);
 	void HandleArmorChanged(const FOnAttributeChangeData& Change);
 	void TickShieldRegen();
+
+	/** 주인 폰 컨트롤러(GOAP 두뇌 BP)의 SetWorldFact(Key, Value)를 부른다. 함수가 없으면 무시. */
+	void PushBrainFact(FName Key, bool bValue) const;
+
 	void GrantKillRewards(AActor* Killer, const AActor* DamageCauser);
 	void FinalizeKill(AActor* Killer, const AActor* Causer);
 

@@ -151,6 +151,17 @@ public:
 	UFUNCTION(BlueprintPure, Category = "ProjectA|Meta")
 	static EPAModuleCategory GetSlotCategory(EPAModuleSlot Slot);
 
+	/** 스킬 칸(Q·E)인가. 스킬 칸에는 액티브 모듈만, 부위 칸에는 패시브 모듈만 들어간다. */
+	UFUNCTION(BlueprintPure, Category = "ProjectA|Meta")
+	static bool IsSkillSlot(EPAModuleSlot Slot);
+
+	/** 스킬 칸의 발동 키(Q칸 = Q, E칸 = E). 부위 칸이면 빈 키. */
+	UFUNCTION(BlueprintPure, Category = "ProjectA|Meta")
+	static FKey GetSkillSlotKey(EPAModuleSlot Slot);
+
+	/** 칸·모듈 종류만 본 규칙 검사(보유·연산력·런 상태는 보지 않음). */
+	static EPAEquipResult CheckSlotFit(EPAModuleSlot Slot, const FPAModuleDefinition& Def);
+
 	UFUNCTION(BlueprintPure, Category = "ProjectA|Meta")
 	bool IsWeaponUnlocked(FName WeaponId) const;
 
@@ -176,6 +187,8 @@ public:
 private:
 	void Load();
 	void GrantStartersIfNeeded();
+	/** 칸 규칙에 안 맞는 장착을 정리한다(옛 세이브: 부위 칸에 낀 스킬 모듈 → 빈 스킬 칸으로). */
+	void SanitizeLoadout();
 	FPARunSettlement SettleInternal(bool bCleared);
 	int32 SumCompute(const TMap<EPAModuleSlot, FName>& Loadout) const;
 

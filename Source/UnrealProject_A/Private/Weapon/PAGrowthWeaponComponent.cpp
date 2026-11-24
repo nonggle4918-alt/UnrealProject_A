@@ -1,6 +1,10 @@
 #include "Weapon/PAGrowthWeaponComponent.h"
 
 #include "Blueprint/UserWidget.h"
+#include "Engine/World.h"
+#include "EngineUtils.h"
+#include "TimerManager.h"
+#include "HAL/IConsoleManager.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "Meta/PAMetaProgressSubsystem.h"
@@ -9,6 +13,35 @@
 #include "UI/PAEvolutionChoiceWidget.h"
 
 const FName UPAGrowthWeaponComponent::GrowthGunTag(TEXT("GrowthGun"));
+
+#if !UE_BUILD_SHIPPING
+namespace PAGrowthDebug
+{
+	constexpr int32 DefaultCheatXp = 100;
+
+	/** 테스트용: 콘솔에 `PA.GrowthXp 200` → 첫 플레이어의 성장형 총에 경험치 추가 (서버/싱글에서만). */
+	void AddXpCommand(const TArray<FString>& Args, UWorld* World)
+	{
+		APlayerController* PC = World ? World->GetFirstPlayerController() : nullptr;
+		APawn* Pawn = PC ? PC->GetPawn() : nullptr;
+		UPAGrowthWeaponComponent* Growth = Pawn ? Pawn->FindComponentByClass<UPAGrowthWeaponComponent>() : nullptr;
+		if (!Growth)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[Growth] PA.GrowthXp: no player pawn with PAGrowthWeaponComponent"));
+			return;
+		}
+		const int32 Amount = Args.Num() > 0 ? FCString::Atoi(*Args[0]) : DefaultCheatXp;
+		Growth->AddXp(Amount);
+		UE_LOG(LogTemp, Log, TEXT("[Growth] +%d XP -> Lv.%d (%d/%d), form %s"), Amount, Growth->GetLevel(),
+			Growth->GetXp(), Growth->GetXpToNext(), *Growth->GetCurrentFormId().ToString());
+	}
+
+	static FAutoConsoleCommandWithWorldAndArgs GrowthXpCommand(
+		TEXT("PA.GrowthXp"),
+		TEXT("성장형 총 경험치 추가 (테스트용). 예: PA.GrowthXp 200"),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&AddXpCommand));
+}
+#endif
 
 UPAGrowthWeaponComponent::UPAGrowthWeaponComponent()
 {
@@ -36,6 +69,90 @@ void UPAGrowthWeaponComponent::BeginPlay()
 		Xp = 0;
 		LastBroadcastLevel = 1;
 	}
+
+	// 무기는 이 컴포넌트보다 늦게 생긴다(컨트롤러 StartRun) → 생성 이벤트로 잡는다.
+	if (UWorld* World = GetWorld())
+	{
+		ActorSpawnedHandle = World->AddOnActorSpawnedHandler(
+			FOnActorSpawned::FDelegate::CreateUObject(this, &UPAGrowthWeaponComponent::HandleActorSpawned));
+	}
+	ApplyFormToWeapons();
+}
+
+void UPAGrowthWeaponComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (UWorld* World = GetWorld())
+	{
+		World->RemoveOnActorSpawnedHandler(ActorSpawnedHandle);
+	}
+	Super::EndPlay(EndPlayReason);
+}
+
+namespace PAGrowthWeaponVars
+{
+	const TCHAR* const RefireRate = TEXT("Refire Rate");
+	const TCHAR* const MagSize = TEXT("Mag Size");
+	constexpr float MinFireRateMult = 0.1f;
+}
+
+void UPAGrowthWeaponComponent::HandleActorSpawned(AActor* Actor)
+{
+	// 스폰 직후엔 태그·소유자가 아직 BP에서 정해지는 중일 수 있어 다음 틱에 본다.
+	if (!Actor || !GetWorld())
+	{
+		return;
+	}
+	TWeakObjectPtr<AActor> WeakActor(Actor);
+	GetWorld()->GetTimerManager().SetTimerForNextTick(FTimerDelegate::CreateWeakLambda(this, [this, WeakActor]()
+	{
+		if (AActor* Spawned = WeakActor.Get())
+		{
+			ApplyFormToWeapon(Spawned);
+		}
+	}));
+}
+
+void UPAGrowthWeaponComponent::ApplyFormToWeapons()
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		ApplyFormToWeapon(*It);
+	}
+}
+
+void UPAGrowthWeaponComponent::ApplyFormToWeapon(AActor* Weapon)
+{
+	if (!Weapon || Weapon->GetOwner() != GetOwner() || !Weapon->ActorHasTag(GrowthGunTag))
+	{
+		return;
+	}
+	FDoubleProperty* RefireProp = FindFProperty<FDoubleProperty>(Weapon->GetClass(), PAGrowthWeaponVars::RefireRate);
+	FIntProperty* MagProp = FindFProperty<FIntProperty>(Weapon->GetClass(), PAGrowthWeaponVars::MagSize);
+	if (!RefireProp || !MagProp)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Growth] %s has no 'Refire Rate'/'Mag Size' - fire rate & magazine not applied"), *GetNameSafe(Weapon));
+		return;
+	}
+
+	FWeaponBaseStats* Base = WeaponBaseStats.Find(Weapon);
+	if (!Base)
+	{
+		FWeaponBaseStats NewBase;
+		NewBase.RefireRate = RefireProp->GetPropertyValue_InContainer(Weapon);
+		NewBase.MagSize = MagProp->GetPropertyValue_InContainer(Weapon);
+		Base = &WeaponBaseStats.Add(Weapon, NewBase);
+	}
+
+	const double NewRefire = Base->RefireRate / FMath::Max(GetFireRateMult(), PAGrowthWeaponVars::MinFireRateMult);
+	const int32 NewMag = FMath::Max(Base->MagSize + GetMagazineBonus(), 1);
+	RefireProp->SetPropertyValue_InContainer(Weapon, NewRefire);
+	MagProp->SetPropertyValue_InContainer(Weapon, NewMag);
+	UE_LOG(LogTemp, Log, TEXT("[Growth] %s form %s: refire %.3f, mag %d"), *GetNameSafe(Weapon), *FormId.ToString(), NewRefire, NewMag);
 }
 
 void UPAGrowthWeaponComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -278,6 +395,7 @@ void UPAGrowthWeaponComponent::OnRep_Level(int32 OldLevel)
 
 void UPAGrowthWeaponComponent::OnRep_FormId(FName OldFormId)
 {
+	ApplyFormToWeapons();
 	if (const FPAGrowthForm* Form = UPAProjectSettings::Get()->FindGrowthForm(FormId))
 	{
 		OnEvolved.Broadcast(*Form);

@@ -5,7 +5,10 @@
 #include "Components/Border.h"
 #include "Components/CanvasPanel.h"
 #include "Components/CanvasPanelSlot.h"
+#include "Components/HorizontalBox.h"
+#include "Components/HorizontalBoxSlot.h"
 #include "Components/ProgressBar.h"
+#include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
@@ -14,6 +17,15 @@
 #include "Skills/PAModuleLoadoutComponent.h"
 #include "UI/PAUIBuilder.h"
 #include "Weapon/PAGrowthWeaponComponent.h"
+
+namespace
+{
+	const EPAModuleSlot SkillSlots[] = { EPAModuleSlot::SkillQ, EPAModuleSlot::SkillE };
+	const FLinearColor SlotReadyColor(0.05f, 0.12f, 0.16f, 0.85f);
+	const FLinearColor SlotCooldownColor(0.05f, 0.05f, 0.07f, 0.85f);
+	const FLinearColor SlotEmptyColor(0.03f, 0.03f, 0.04f, 0.55f);
+	constexpr float SlotSize = 104.f;
+}
 
 TSharedRef<SWidget> UPARunHUDWidget::RebuildWidget()
 {
@@ -50,6 +62,78 @@ void UPARunHUDWidget::BuildTree()
 	Column->AddChildToVerticalBox(GrowthBar)->SetPadding(FMargin(0.f, 0.f, 0.f, 6.f));
 	Column->AddChildToVerticalBox(DefenseText);
 	Column->AddChildToVerticalBox(SkillsText)->SetPadding(FMargin(0.f, 6.f, 0.f, 0.f));
+
+	BuildSkillSlots(Root);
+}
+
+void UPARunHUDWidget::BuildSkillSlots(UCanvasPanel* Root)
+{
+	UHorizontalBox* Row = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
+	UCanvasPanelSlot* RowSlot = Root->AddChildToCanvas(Row);
+	RowSlot->SetAnchors(FAnchors(1.f, 1.f));
+	RowSlot->SetAlignment(FVector2D(1.f, 1.f));
+	RowSlot->SetPosition(FVector2D(-30.f, -30.f));
+	RowSlot->SetAutoSize(true);
+
+	for (const EPAModuleSlot ModSlot : SkillSlots)
+	{
+		USizeBox* Size = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
+		Size->SetWidthOverride(SlotSize);
+		Size->SetHeightOverride(SlotSize);
+
+		UBorder* Box = PAUI::Box(WidgetTree, SlotEmptyColor, FMargin(8.f));
+		Size->SetContent(Box);
+
+		UVerticalBox* Col = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass());
+		Box->SetContent(Col);
+
+		UTextBlock* KeyText = PAUI::Text(WidgetTree,
+			UPAMetaProgressSubsystem::GetSkillSlotKey(ModSlot).GetDisplayName(), 26, PAUI::Accent);
+		UTextBlock* NameText = PAUI::Text(WidgetTree, FText::GetEmpty(), 12, PAUI::TextMain);
+		NameText->SetAutoWrapText(true);
+		UTextBlock* CdText = PAUI::Text(WidgetTree, FText::GetEmpty(), 13, PAUI::Accent2);
+		UProgressBar* Bar = PAUI::Bar(WidgetTree, 1.f, PAUI::Accent);
+
+		Col->AddChildToVerticalBox(KeyText);
+		Col->AddChildToVerticalBox(NameText);
+		Col->AddChildToVerticalBox(CdText);
+		Col->AddChildToVerticalBox(Bar)->SetPadding(FMargin(0.f, 4.f, 0.f, 0.f));
+
+		UHorizontalBoxSlot* HSlot = Row->AddChildToHorizontalBox(Size);
+		HSlot->SetPadding(FMargin(8.f, 0.f, 0.f, 0.f));
+
+		SlotBoxes.Add(Box);
+		SlotNames.Add(NameText);
+		SlotCooldowns.Add(CdText);
+		SlotBars.Add(Bar);
+	}
+}
+
+void UPARunHUDWidget::RefreshSkillSlots(const UPAModuleLoadoutComponent* Loadout)
+{
+	for (int32 i = 0; i < UE_ARRAY_COUNT(SkillSlots) && SlotBoxes.IsValidIndex(i); ++i)
+	{
+		const FKey SlotKey = UPAMetaProgressSubsystem::GetSkillSlotKey(SkillSlots[i]);
+		const FPASkillBinding* Binding = nullptr;
+		if (Loadout)
+		{
+			Binding = Loadout->GetSkillBindings().FindByPredicate([&SlotKey](const FPASkillBinding& B) { return B.InputKey == SlotKey; });
+		}
+		if (!Binding)
+		{
+			SlotBoxes[i]->SetBrushColor(SlotEmptyColor);
+			SlotNames[i]->SetText(FText::FromString(TEXT("비어 있음")));
+			SlotCooldowns[i]->SetText(FText::GetEmpty());
+			SlotBars[i]->SetPercent(0.f);
+			continue;
+		}
+		const float Remaining = Loadout->GetCooldownRemaining(Binding->Key);
+		const bool bReady = Remaining <= 0.f;
+		SlotBoxes[i]->SetBrushColor(bReady ? SlotReadyColor : SlotCooldownColor);
+		SlotNames[i]->SetText(Binding->DisplayName);
+		SlotCooldowns[i]->SetText(FText::FromString(bReady ? TEXT("준비") : FString::Printf(TEXT("%.1f초"), Remaining)));
+		SlotBars[i]->SetPercent(1.f - Loadout->GetCooldownFraction(Binding->Key)); // 다 차면 준비
+	}
 }
 
 void UPARunHUDWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
@@ -100,10 +184,16 @@ void UPARunHUDWidget::Refresh()
 		: FString()));
 
 	FString Skills;
-	if (const UPAModuleLoadoutComponent* Loadout = Pawn->FindComponentByClass<UPAModuleLoadoutComponent>())
+	const UPAModuleLoadoutComponent* Loadout = Pawn->FindComponentByClass<UPAModuleLoadoutComponent>();
+	RefreshSkillSlots(Loadout);
+	if (Loadout)
 	{
 		for (const FPASkillBinding& B : Loadout->GetSkillBindings())
 		{
+			if (B.InputKey == EKeys::Q || B.InputKey == EKeys::E)
+			{
+				continue; // 오른쪽 아래 스킬 칸에 따로 보인다
+			}
 			const float Remaining = Loadout->GetCooldownRemaining(B.Key);
 			Skills += FString::Printf(TEXT("[%s] %s  %s\n"), *B.InputKey.GetDisplayName().ToString(), *B.DisplayName.ToString(),
 				Remaining > 0.f ? *FString::Printf(TEXT("%.1f초"), Remaining) : TEXT("준비"));

@@ -33,7 +33,11 @@ enum class EPAModuleCategory : uint8
 	Brain UMETA(DisplayName = "뇌"),
 };
 
-/** 모듈 장착 칸 7개: 왼팔·오른팔·왼다리·오른다리·뇌 3칸. */
+/**
+ * 모듈 장착 칸. 부위 7칸(왼팔·오른팔·왼다리·오른다리·뇌 3칸)은 패시브 전용,
+ * 스킬 칸 2개(Q·E)는 액티브 스킬 모듈 전용. 키는 칸에 고정된다(Q칸 = Q키).
+ * 세이브에 값이 저장되므로 새 칸은 Count 바로 앞에만 추가한다.
+ */
 UENUM(BlueprintType)
 enum class EPAModuleSlot : uint8
 {
@@ -44,6 +48,8 @@ enum class EPAModuleSlot : uint8
 	Brain1 UMETA(DisplayName = "뇌 1"),
 	Brain2 UMETA(DisplayName = "뇌 2"),
 	Brain3 UMETA(DisplayName = "뇌 3"),
+	SkillQ UMETA(DisplayName = "스킬 Q"),
+	SkillE UMETA(DisplayName = "스킬 E"),
 	Count UMETA(Hidden),
 };
 
@@ -58,6 +64,8 @@ enum class EPAEquipResult : uint8
 	Duplicate UMETA(DisplayName = "이미 다른 칸에 장착됨"),
 	OverCompute UMETA(DisplayName = "연산력 부족"),
 	RunInProgress UMETA(DisplayName = "런 진행 중에는 변경 불가"),
+	SkillSlotOnly UMETA(DisplayName = "스킬 모듈은 Q·E 칸에만"),
+	NotASkill UMETA(DisplayName = "스킬 칸에는 스킬 모듈만"),
 };
 
 /** 런 종료 시 귀속 기준. [미정] 결정 사항이라 설정으로 둔다. */
@@ -217,7 +225,7 @@ struct FPAModuleDefinition
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Module|Active")
 	TSoftClassPtr<UGameplayAbility> ActiveAbility;
 
-	/** 액티브 스킬 키. 키는 슬롯이 아니라 능력에 고정한다(장착 칸이 바뀌어도 키가 같다). */
+	/** 예비 키. 보통은 비워 둔다 — 스킬 키는 장착한 스킬 칸(Q·E)이 정한다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Module|Active")
 	FKey ActivationKey;
 
@@ -292,6 +300,10 @@ struct FPAGrowthForm
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Growth")
 	int32 MagazineBonus = 0;
+
+	/** 헤드샷 배율 (적 BP의 HeadshotMult 대신 쓴다). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Growth")
+	float HeadshotMult = 2.f;
 
 	/** 외형(무기 BP). 비어 있으면 무기 교체 없이 수치만 바뀐다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Growth")

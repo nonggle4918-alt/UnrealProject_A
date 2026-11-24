@@ -5,6 +5,7 @@
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "DrawDebugHelpers.h"
+#include "Engine/Engine.h"
 #include "Engine/OverlapResult.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
@@ -49,6 +50,78 @@ namespace
 		// 아군 판정: 다른 플레이어. 적은 BP에서 "Enemy" 액터 태그를 쓴다.
 		const APawn* Pawn = Cast<APawn>(Actor);
 		return Pawn && Pawn->IsPlayerControlled();
+	}
+
+	/** 해킹할 수 있는 적인가 (능력 시스템이 있고, 아군이 아니고, 아직 살아 있음). */
+	bool IsBreachable(const AActor* Actor, const AActor* Self)
+	{
+		if (!Actor || Actor == Self || IsFriendlyToPlayer(Actor) || !UPADamageLibrary::FindAbilitySystem(Actor))
+		{
+			return false;
+		}
+		float Health, MaxHealth, Shield, MaxShield, Armor, MaxArmor;
+		UPADamageLibrary::GetDefenseLayers(Actor, Health, MaxHealth, Shield, MaxShield, Armor, MaxArmor);
+		return MaxHealth <= 0.f || Health > 0.f;
+	}
+
+	constexpr float BreachAimAssistRadius = 60.f;
+
+	/**
+	 * 조준 보정 탐색: 시선 방향으로 굵은 구체를 쓸어 가장 가까운 적을 고른다.
+	 * 벽 뒤 적은 제외 (시선이 먼저 막힌 거리까지만 쓴다).
+	 */
+	AActor* FindBreachTarget(const APawn* Pawn, const FVector& Start, const FVector& Dir, float Range, FHitResult& OutHit)
+	{
+		UWorld* World = Pawn ? Pawn->GetWorld() : nullptr;
+		if (!World)
+		{
+			return nullptr;
+		}
+		FCollisionQueryParams Params(SCENE_QUERY_STAT(PABreachTrace), false, Pawn);
+		TArray<AActor*> Attached;
+		Pawn->GetAttachedActors(Attached, true, true);
+		Params.AddIgnoredActors(Attached);
+
+		// 1) 시선이 처음 막히는 곳. 그게 바로 적이면 끝.
+		float MaxDistance = Range;
+		FHitResult WallHit;
+		if (World->LineTraceSingleByChannel(WallHit, Start, Start + Dir * Range, ECC_Visibility, Params))
+		{
+			if (IsBreachable(WallHit.GetActor(), Pawn))
+			{
+				OutHit = WallHit;
+				return WallHit.GetActor();
+			}
+			MaxDistance = WallHit.Distance + BreachAimAssistRadius;
+		}
+
+		// 2) 그 거리까지 굵게 쓸어서 가장 가까운 적.
+		TArray<FHitResult> Hits;
+		FCollisionObjectQueryParams Objects;
+		Objects.AddObjectTypesToQuery(ECC_Pawn);
+		World->SweepMultiByObjectType(Hits, Start, Start + Dir * MaxDistance, FQuat::Identity, Objects,
+			FCollisionShape::MakeSphere(BreachAimAssistRadius), Params);
+		for (const FHitResult& H : Hits) // 가까운 순
+		{
+			if (IsBreachable(H.GetActor(), Pawn))
+			{
+				OutHit = H;
+				if (OutHit.ImpactPoint.IsZero())
+				{
+					OutHit.ImpactPoint = H.GetActor()->GetActorLocation();
+				}
+				return H.GetActor();
+			}
+		}
+		return nullptr;
+	}
+
+	void ShowLocalSkillMessage(const APawn* Pawn, const FString& Message)
+	{
+		if (GEngine && Pawn && Pawn->IsLocallyControlled())
+		{
+			GEngine->AddOnScreenDebugMessage(-1, 1.2f, FColor(255, 120, 120), Message);
+		}
 	}
 }
 
@@ -395,11 +468,18 @@ void UPAGA_Breach::ActivateAbility(const FGameplayAbilitySpecHandle Handle, cons
 	const float HumanDamage = (Def && Def->Param3 > 0.f) ? Def->Param3 : 40.f;
 
 	FHitResult Hit;
-	AActor* Target = Pawn ? TraceAimTarget(Range, Hit) : nullptr;
-	const bool bValidTarget = Target && UPADamageLibrary::FindAbilitySystem(Target) && !IsFriendlyToPlayer(Target);
-	if (!bValidTarget || !CommitAbility(Handle, ActorInfo, ActivationInfo))
+	FVector AimStart, AimDir;
+	GetAimPoint(AimStart, AimDir);
+	AActor* Target = Pawn ? FindBreachTarget(Pawn, AimStart, AimDir, Range, Hit) : nullptr;
+	if (!Target)
 	{
 		// 대상이 없으면 쿨다운 없이 끝낸다.
+		ShowLocalSkillMessage(Pawn, TEXT("침투 데크: 조준한 적이 없음"));
+		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
+		return;
+	}
+	if (!CommitAbility(Handle, ActorInfo, ActivationInfo))
+	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
 	}

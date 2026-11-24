@@ -135,7 +135,24 @@ protected:
 	UFUNCTION()
 	void OnRep_PendingChoices();
 
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
 private:
+	/** 무기 BP 원래 값 (형태 배율을 곱하기 전). */
+	struct FWeaponBaseStats
+	{
+		double RefireRate = 0.0;
+		int32 MagSize = 0;
+	};
+
+	/** 현재 형태의 연사·탄창 보너스를 GrowthGun 태그 무기 BP의 Refire Rate / Mag Size에 반영한다. */
+	void ApplyFormToWeapons();
+	void ApplyFormToWeapon(AActor* Weapon);
+	void HandleActorSpawned(AActor* Actor);
+
+	TMap<TWeakObjectPtr<AActor>, FWeaponBaseStats> WeaponBaseStats;
+	FDelegateHandle ActorSpawnedHandle;
+
 	void CheckEvolution();
 	void ApplyEvolution(FName NewFormId);
 	void ShowChoiceWidgetIfLocal();

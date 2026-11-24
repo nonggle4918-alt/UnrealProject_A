@@ -56,6 +56,17 @@ public:
 	UFUNCTION(BlueprintPure, Category = "ProjectA|Damage")
 	static bool GetAmmoProfile(FName AmmoId, FPAAmmoProfile& OutProfile);
 
+	/**
+	 * 총별 헤드샷 배율. 성장형 총 = 현재 형태 값, 그 외 = 무기 BP의 WeaponHeadshotMult 변수(0보다 클 때).
+	 * 둘 다 없으면 Fallback(적 BP의 HeadshotMult)을 돌려준다.
+	 */
+	UFUNCTION(BlueprintPure, Category = "ProjectA|Damage")
+	static float GetWeaponHeadshotMult(const AActor* DamageCauser, float Fallback = 2.f);
+
+	/** 무기 BP의 WeaponDamageMult 변수 (없으면 1). 성장형 총은 형태 배율을 따로 쓴다. */
+	UFUNCTION(BlueprintPure, Category = "ProjectA|Damage")
+	static float GetWeaponDamageMult(const AActor* DamageCauser);
+
 	/** 탄종의 탄창 덮어쓰기 값 (EMP = 1). 0이면 무기 기본 탄창. 무기 BP의 재장전에서 읽는다. */
 	UFUNCTION(BlueprintPure, Category = "ProjectA|Damage")
 	static int32 GetAmmoMagazineOverride(FName AmmoId);
@@ -67,6 +78,18 @@ public:
 	/** 공격 보정 스탯 읽기. 이름: DamageMult, MeleeDamageMult, ReloadMult, CooldownMult, MoveSpeedMult 등. 없으면 기본값. */
 	UFUNCTION(BlueprintPure, Category = "ProjectA|Damage")
 	static float GetCombatStat(const AActor* Actor, FName StatName);
+
+	/** 피해를 준 컨트롤러의 폰. 가해자 없는 피해(크롤러 자폭 등)면 None — 오류 없이. */
+	UFUNCTION(BlueprintPure, Category = "ProjectA|Damage")
+	static APawn* GetInstigatorPawnSafe(const AController* InstigatedBy);
+
+	/** 피해 방향 위치: 가해자 폰 위치, 없으면 Fallback 액터 위치 (오류 없이). */
+	UFUNCTION(BlueprintPure, Category = "ProjectA|Damage")
+	static FVector GetDamageSourceLocation(const AController* InstigatedBy, const AActor* Fallback);
+
+	/** 사람 플레이어가 준 피해인가 (히트마커 등 플레이어 화면 피드백용). */
+	UFUNCTION(BlueprintPure, Category = "ProjectA|Damage")
+	static bool IsPlayerInstigator(const AController* InstigatedBy);
 
 	/** 방어층 현재/최대값 (HP바·실드바 표시용). */
 	UFUNCTION(BlueprintPure, Category = "ProjectA|Damage")

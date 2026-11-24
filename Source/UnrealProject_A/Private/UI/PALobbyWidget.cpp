@@ -36,6 +36,8 @@ namespace
 		case EPAModuleSlot::Brain1: return FText::FromString(TEXT("뇌 1"));
 		case EPAModuleSlot::Brain2: return FText::FromString(TEXT("뇌 2"));
 		case EPAModuleSlot::Brain3: return FText::FromString(TEXT("뇌 3"));
+		case EPAModuleSlot::SkillQ: return FText::FromString(TEXT("스킬 Q"));
+		case EPAModuleSlot::SkillE: return FText::FromString(TEXT("스킬 E"));
 		default: return FText::GetEmpty();
 		}
 	}
@@ -61,6 +63,8 @@ namespace
 		case EPAEquipResult::Duplicate: return FText::FromString(TEXT("다른 칸에 장착됨"));
 		case EPAEquipResult::OverCompute: return FText::FromString(TEXT("연산력 부족"));
 		case EPAEquipResult::RunInProgress: return FText::FromString(TEXT("런 진행 중"));
+		case EPAEquipResult::SkillSlotOnly: return FText::FromString(TEXT("스킬 칸 전용"));
+		case EPAEquipResult::NotASkill: return FText::FromString(TEXT("스킬 모듈만"));
 		default: return FText::GetEmpty();
 		}
 	}
@@ -297,12 +301,27 @@ void UPALobbyWidget::BuildLoadout()
 
 	Content->AddChildToVerticalBox(PAUI::Text(WidgetTree, FText::FromString(TEXT("장착 칸")), 24, PAUI::Accent2));
 	Content->AddChildToVerticalBox(PAUI::Text(WidgetTree, FText::FromString(
-		TEXT("칸을 누르면 아래에 그 부위 모듈이 나온다. 같은 모듈은 두 칸에 못 낀다.")), 14, PAUI::TextDim))
+		TEXT("칸을 누르면 아래에 그 칸에 낄 수 있는 보유 모듈이 나온다. 같은 모듈은 두 칸에 못 낀다.")), 14, PAUI::TextDim))
 		->SetPadding(FMargin(0.f, 0.f, 0.f, 8.f));
 
+	// 스킬 칸을 맨 위에 보여 준다.
+	TArray<EPAModuleSlot> SlotOrder = { EPAModuleSlot::SkillQ, EPAModuleSlot::SkillE };
 	for (uint8 i = 0; i < static_cast<uint8>(EPAModuleSlot::Count); ++i)
 	{
-		const EPAModuleSlot ModSlot = static_cast<EPAModuleSlot>(i);
+		SlotOrder.AddUnique(static_cast<EPAModuleSlot>(i));
+	}
+	bool bPassiveHeaderShown = false;
+	for (const EPAModuleSlot ModSlot : SlotOrder)
+	{
+		const bool bSkillRow = UPAMetaProgressSubsystem::IsSkillSlot(ModSlot);
+		if (ModSlot == EPAModuleSlot::SkillQ || (!bSkillRow && !bPassiveHeaderShown))
+		{
+			bPassiveHeaderShown |= !bSkillRow;
+			Content->AddChildToVerticalBox(PAUI::Text(WidgetTree, FText::FromString(bSkillRow
+				? TEXT("■ 스킬 칸 2개 — 런에서 Q·E 키로 쓰는 액티브 스킬 (오른쪽 아래 Q·E 칸에 쿨다운 표시)")
+				: TEXT("■ 패시브 칸 7개 — 끼워 두기만 하면 항상 켜지는 능력치 (팔·다리·뇌 부위별)")),
+				17, bSkillRow ? PAUI::Accent : PAUI::Accent2))->SetPadding(FMargin(0.f, 10.f, 0.f, 4.f));
+		}
 		const FName Equipped = Meta->GetEquipped(ModSlot);
 		const FPAModuleDefinition* Def = Settings->FindModule(Equipped);
 		const FString Label = FString::Printf(TEXT("%s%s :  %s"),
@@ -328,15 +347,18 @@ void UPALobbyWidget::BuildLoadout()
 		Content->AddChildToVerticalBox(R);
 	}
 
+	const bool bSkillSlot = UPAMetaProgressSubsystem::IsSkillSlot(SelectedSlot);
 	const EPAModuleCategory Category = UPAMetaProgressSubsystem::GetSlotCategory(SelectedSlot);
 	Content->AddChildToVerticalBox(PAUI::Text(WidgetTree, FText::FromString(FString::Printf(
-		TEXT("%s에 낄 수 있는 보유 모듈 (%s)"), *PASlotLabel(SelectedSlot).ToString(), *PACategoryLabel(Category).ToString())),
+		TEXT("%s에 낄 수 있는 보유 모듈 (%s)"), *PASlotLabel(SelectedSlot).ToString(),
+		bSkillSlot ? TEXT("스킬") : *FString::Printf(TEXT("%s · 패시브"), *PACategoryLabel(Category).ToString()))),
 		20, PAUI::Accent))->SetPadding(FMargin(0.f, 18.f, 0.f, 6.f));
 
 	int32 Shown = 0;
 	for (const FPAModuleDefinition& M : Settings->Modules)
 	{
-		if (M.Category != Category || !Meta->OwnsModule(M.Id))
+		if (!Meta->OwnsModule(M.Id)
+			|| UPAMetaProgressSubsystem::CheckSlotFit(SelectedSlot, M) != EPAEquipResult::Ok)
 		{
 			continue;
 		}
@@ -382,7 +404,7 @@ void UPALobbyWidget::BuildLoadout()
 	}
 	if (Shown == 0)
 	{
-		Content->AddChildToVerticalBox(PAUI::Text(WidgetTree, FText::FromString(TEXT("이 부위 모듈을 아직 갖고 있지 않다. 상점에서 산다.")), 15, PAUI::TextDim));
+		Content->AddChildToVerticalBox(PAUI::Text(WidgetTree, FText::FromString(bSkillSlot ? TEXT("스킬 모듈을 아직 갖고 있지 않다. 상점에서 산다.") : TEXT("이 부위 패시브 모듈을 아직 갖고 있지 않다. 상점에서 산다.")), 15, PAUI::TextDim));
 	}
 }
 

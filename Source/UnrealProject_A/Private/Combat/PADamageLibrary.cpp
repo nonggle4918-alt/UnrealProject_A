@@ -1,5 +1,7 @@
 #include "Combat/PADamageLibrary.h"
 
+#include "AI/PAEnemyAILibrary.h"
+
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemInterface.h"
 #include "Combat/PACombatProfileComponent.h"
@@ -71,6 +73,40 @@ namespace
 		OutValue = Prop->GetPropertyValue_InContainer(Actor);
 		return !OutValue.IsNone();
 	}
+
+	/** BP float 변수(UE5 BP float = double) 읽기. 없으면 false. */
+	bool ReadFloatVariable(const AActor* Actor, const TCHAR* VarName, float& OutValue)
+	{
+		const FProperty* Prop = FindFProperty<FProperty>(Actor->GetClass(), VarName);
+		if (const FDoubleProperty* D = CastField<FDoubleProperty>(Prop))
+		{
+			OutValue = static_cast<float>(D->GetPropertyValue_InContainer(Actor));
+			return true;
+		}
+		if (const FFloatProperty* F = CastField<FFloatProperty>(Prop))
+		{
+			OutValue = F->GetPropertyValue_InContainer(Actor);
+			return true;
+		}
+		return false;
+	}
+
+	/** DamageCauser(총알)부터 소유자 체인을 올라가며 첫 float 변수를 찾는다. */
+	bool FindOwnerFloat(const AActor* DamageCauser, const TCHAR* VarName, float& OutValue)
+	{
+		const AActor* It = DamageCauser;
+		for (int32 Depth = 0; It && Depth < MaxOwnerDepth; ++Depth, It = It->GetOwner())
+		{
+			if (ReadFloatVariable(It, VarName, OutValue))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	const TCHAR* const WeaponDamageMultVar = TEXT("WeaponDamageMult");
+	const TCHAR* const WeaponHeadshotMultVar = TEXT("WeaponHeadshotMult");
 }
 
 // ---------- 이벤트 경유 피해의 탄종 전달 ----------
@@ -144,6 +180,34 @@ FName UPADamageLibrary::ResolveAmmoId(const AActor* DamageCauser)
 		}
 	}
 	return TEXT("Normal");
+}
+
+float UPADamageLibrary::GetWeaponHeadshotMult(const AActor* DamageCauser, float Fallback)
+{
+	if (const UPAGrowthWeaponComponent* Growth = FindGrowthForCauser(DamageCauser))
+	{
+		const float FormMult = Growth->GetCurrentForm().HeadshotMult;
+		if (FormMult > 0.f)
+		{
+			return FormMult;
+		}
+	}
+	float WeaponMult = 0.f;
+	if (FindOwnerFloat(DamageCauser, WeaponHeadshotMultVar, WeaponMult) && WeaponMult > 0.f)
+	{
+		return WeaponMult;
+	}
+	return Fallback;
+}
+
+float UPADamageLibrary::GetWeaponDamageMult(const AActor* DamageCauser)
+{
+	float WeaponMult = 1.f;
+	if (FindOwnerFloat(DamageCauser, WeaponDamageMultVar, WeaponMult) && WeaponMult > 0.f)
+	{
+		return WeaponMult;
+	}
+	return 1.f;
 }
 
 bool UPADamageLibrary::GetAmmoProfile(FName AmmoId, FPAAmmoProfile& OutProfile)
@@ -287,6 +351,7 @@ bool UPADamageLibrary::ApplyStun(AActor* Target, float Seconds, AActor* Instigat
 			: FString(TEXT("StunBrain"));
 		Target->CallFunctionByNameWithArguments(*Cmd, Ar, nullptr, true);
 	}
+	UPAEnemyAILibrary::SetRobotEyeForSeconds(Target, EPARobotEyeState::Off, Duration);
 	return true;
 }
 
@@ -314,10 +379,14 @@ FPADamageResult UPADamageLibrary::ApplyAmmoDamage(AActor* Target, float BaseDama
 	FPAAmmoProfile Ammo;
 	GetAmmoProfile(AmmoId, Ammo);
 
-	// 성장형 총 형태 배율
+	// 총별 배율: 성장형 총은 형태 배율, 그 외 무기는 BP의 WeaponDamageMult. 근접은 무기 배율 없음.
 	if (const UPAGrowthWeaponComponent* Growth = FindGrowthForCauser(DamageCauser))
 	{
 		BaseDamage *= Growth->GetDamageMult();
+	}
+	else if (!bIsMelee)
+	{
+		BaseDamage *= GetWeaponDamageMult(DamageCauser);
 	}
 
 	UAbilitySystemComponent* TargetASC = FindAbilitySystem(Target);
@@ -486,4 +555,25 @@ FPADamageResult UPADamageLibrary::DealAmmoDamage(AActor* Target, float BaseDamag
 	R.bUsedLegacyDamage = true;
 	R.bKilled = TargetASC && HealthBefore > 0.f && HealthAfter <= 0.f;
 	return R;
+}
+
+// ---------- 가해자 정보 (가해자 없는 피해도 안전하게) ----------
+
+APawn* UPADamageLibrary::GetInstigatorPawnSafe(const AController* InstigatedBy)
+{
+	return IsValid(InstigatedBy) ? InstigatedBy->GetPawn() : nullptr;
+}
+
+FVector UPADamageLibrary::GetDamageSourceLocation(const AController* InstigatedBy, const AActor* Fallback)
+{
+	if (const APawn* Pawn = GetInstigatorPawnSafe(InstigatedBy))
+	{
+		return Pawn->GetActorLocation();
+	}
+	return IsValid(Fallback) ? Fallback->GetActorLocation() : FVector::ZeroVector;
+}
+
+bool UPADamageLibrary::IsPlayerInstigator(const AController* InstigatedBy)
+{
+	return IsValid(InstigatedBy) && InstigatedBy->IsPlayerController();
 }
