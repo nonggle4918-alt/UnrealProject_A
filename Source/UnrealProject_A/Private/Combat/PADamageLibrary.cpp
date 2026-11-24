@@ -342,14 +342,26 @@ bool UPADamageLibrary::ApplyStun(AActor* Target, float Seconds, AActor* Instigat
 		}
 	}
 
-	// 기존 적 BP의 두뇌 정지 함수가 있으면 같이 부른다 (AI가 태그를 아직 안 읽는 경우 대비).
-	if (UFunction* StunFunc = Target->FindFunction(TEXT("StunBrain")))
+	// 적 AI의 두뇌 정지 함수(StunBrain)를 부른다. AIC_Enemy(컨트롤러)에 있으므로 폰 → 컨트롤러 순으로 찾는다.
+	// (AI가 Stunned 태그를 직접 읽지 않으므로 이게 없으면 눈만 꺼지고 계속 움직인다.)
+	AActor* StunReceivers[] = { Target, nullptr };
+	if (const APawn* TargetPawn = Cast<APawn>(Target))
 	{
+		StunReceivers[1] = TargetPawn->GetController();
+	}
+	for (AActor* Receiver : StunReceivers)
+	{
+		UFunction* StunFunc = Receiver ? Receiver->FindFunction(TEXT("StunBrain")) : nullptr;
+		if (!StunFunc)
+		{
+			continue;
+		}
 		FOutputDeviceNull Ar;
 		const FString Cmd = StunFunc->NumParms > 0
 			? FString::Printf(TEXT("StunBrain %f"), Duration)
 			: FString(TEXT("StunBrain"));
-		Target->CallFunctionByNameWithArguments(*Cmd, Ar, nullptr, true);
+		Receiver->CallFunctionByNameWithArguments(*Cmd, Ar, nullptr, true);
+		break;
 	}
 	UPAEnemyAILibrary::SetRobotEyeForSeconds(Target, EPARobotEyeState::Off, Duration);
 	return true;

@@ -486,11 +486,15 @@ void UPAGA_Breach::ActivateAbility(const FGameplayAbilitySpecHandle Handle, cons
 
 	if (UPADamageLibrary::GetEnemyRace(Target) == EPAEnemyRace::Robot)
 	{
-		UPADamageLibrary::ApplyStun(Target, StunSeconds, Pawn);
+		const bool bStunned = UPADamageLibrary::ApplyStun(Target, StunSeconds, Pawn);
+		ShowLocalSkillMessage(Pawn, bStunned
+			? FString::Printf(TEXT("침투 데크: 로봇 기절 %.1f초"), StunSeconds)
+			: FString(TEXT("침투 데크: 기절 면역 (보스)")));
 	}
 	else
 	{
 		UPADamageLibrary::DealAmmoDamage(Target, HumanDamage, TEXT("Normal"), Pawn, Pawn, false);
+		ShowLocalSkillMessage(Pawn, FString::Printf(TEXT("침투 데크: 사람 — 회로 피해 %.0f (기절은 로봇만)"), HumanDamage));
 	}
 
 #if ENABLE_DRAW_DEBUG

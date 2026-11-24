@@ -146,6 +146,12 @@ git lfs pull                    # 에셋 실물 받기
 - 기본 지급: 블레이드 2 + 스프링 2 + **신경 가속기 5(이제 무료·기본)** + 침투 데크 3 = 연산력 12 꽉 참. 새 세이브는 Q = 신경 가속기(슬로우), E = 침투 데크(해킹).
 - 옛 세이브: 로드 때 부위 칸에 낀 스킬 모듈을 빈 스킬 칸으로 옮긴다(`SanitizeLoadout`, 로그 `[Meta] Loadout migrated`). 이 PC 세이브는 Q = 침투 데크, E = 미사일 포드로 옮겨졌다 → 대기실 세팅에서 원하는 대로 바꾸면 된다. 처음 상태로 보려면 `ResetProgress`.
 - 총기 피해·헤드샷 배율이 총마다 같던 버그: `BP_ShooterWeaponBase`의 Fire Bullet에서 탄 SpawnActor의 Owner를 캐릭터 → **무기(Self)**로 바꿨다(배율을 Owner 사슬에서 찾기 때문). 플레이 확인 필요.
+- HUD(2026-11-24 저녁): 오른쪽 아래 스킬 칸 Q·E (`UPARunHUDWidget::BuildSkillSlots` — 이름·남은 초·쿨다운 막대, 비면 "비어 있음"). 대기실 세팅은 "■ 스킬 칸 2개" / "■ 패시브 칸 7개" 묶음 제목으로 나뉜다.
+- 적 머리 위 실드(시안)·갑옷(노랑) 막대: `UPAEnemyDefenseWidget`, `UPACombatProfileComponent::SpawnDefenseBar`가 BP의 `HPWidget` 위에 붙인다. 최대치 0인 층은 숨김, 깨지면 "파괴".
+- 침투 데크: 조준 보정(반경 60 구체 탐색, 벽 뒤 제외) + 대상 없으면 화면에 "조준한 적이 없음"(쿨다운 안 돎).
+- 기절(침투 데크·EMP탄) 수정: `ApplyStun`이 AI 두뇌 정지 함수 `StunBrain(Duration)`을 폰에서만 찾아 못 부르고 있었다(실제는 `AIC_Enemy`에 있음) → 폰 → 컨트롤러 순으로 찾는다. 발동 시 결과 글자: "로봇 기절 2.5초" / "사람 — 회로 피해 40 (기절은 로봇만)" / "기절 면역 (보스)". 사람 적은 설계상 피해만 받는다.
+- 권총 연사 간격 0.25 → 0.4초 (DPS 140 → 약 88, 성장형 총 1단계 150보다 낮게). 발당 피해·헤드샷 2.5배는 그대로.
+- 가해자 없는 피해(크롤러 자폭) 안전 처리: C++ `GetInstigatorPawnSafe`/`GetDamageSourceLocation`/`IsPlayerInstigator`, `GetCardPawn`(카드에서 폰을 지연 뒤에도 안전하게). `BP_Enemy` 피격 보고·`ShowHitFeedback`, `BPC_Action_SelfDestruct` Explode/Abort가 이것을 쓴다. 안드로이드 오버드라이브 카드는 `bUninterruptible`(0.1초마다 재시작하던 문제).
 - 옛 BP Q(슬로우 `UseSlowTime`)/E(예지 `UseForesight`): `IMC_Weapons`에서 Q·E 매핑만 지웠다(BP 노드는 남아 있지만 키가 없어 안 불린다). 화면 아래 옛 Q/E 상자(`UI_ShooterBulletCounter`의 `SkillHUD`)는 Collapsed.
 
 ## 5. 테스트 체크리스트 (빌드 후)
