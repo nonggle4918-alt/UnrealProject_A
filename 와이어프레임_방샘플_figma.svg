@@ -1,0 +1,246 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="2080" height="1380" viewBox="0 0 2080 1380"><rect width="2080" height="1380" fill="#FFFFFF"/>
+
+
+<rect x="10" y="10" width="515" height="1340" fill="none" stroke="#222222" stroke-width="1.3"/>
+<g id="범례" font-family="Noto Sans KR" font-size="11" fill="#222222">
+<text x="35" y="45">초기 기획 단계에서 한 스테이지 플레이 타임을 다음과 같이 잡음</text>
+<text x="40" y="62">• 스테이지 7~8분(560~640초) 가량</text>
+<text x="40" y="78">• 일반방 30~60초 가량</text>
+<text x="40" y="94">• 보스방 120초 가량</text>
+<text x="35" y="125">따라서 해당 플레이 타임을 기준으로 방 개수를 산정하면 다음과 같음</text>
+<text x="35" y="141">(일반방 평균 45초로 가정)</text>
+<text x="35" y="172">일반방 10개 보스방 1개</text>
+<text x="35" y="203">플레이어에게 매 번 다른 다양한 환경에 대응하는 경험을 제공하기 위해</text>
+<text x="35" y="219">레벨은 풀에 담긴 것을 랜덤으로 호출하는 형태로 구현</text>
+<text x="35" y="235">랜덤 레벨의 초기 종류는 우선 15개로 시험 제작</text>
+<text x="35" y="251">이후 종류를 늘려야 할 수요가 발생하면 추가 작업 예정</text>
+<text x="35" y="300">입구</text><rect x="35" y="307" width="100" height="14" fill="#0A96FF"/>
+<text x="35" y="365">출구</text><rect x="35" y="372" width="100" height="14" fill="#FF6B6B"/>
+<text x="35" y="430">지형지물 (낮은 벽 200×60×120)</text><rect x="35" y="437" width="100" height="14" fill="#FFFFFF" stroke="#222222" stroke-width="1.2"/>
+<text x="35" y="475">기둥 (80×80×260)</text><rect x="35" y="482" width="20" height="20" fill="#DDDDDD" stroke="#222222" stroke-width="1.2"/>
+</g>
+<circle cx="47" cy="545" r="12" fill="#FF6B6B"/><text x="47" y="549" font-family="Noto Sans KR" font-size="10" font-weight="700" fill="#FFFFFF" text-anchor="middle">0</text><text x="72" y="549" font-family="Noto Sans KR" font-size="11" fill="#222222">원거리 적</text><circle cx="47" cy="589" r="12" fill="#6EEB8C"/><text x="47" y="593" font-family="Noto Sans KR" font-size="10" font-weight="700" fill="#FFFFFF" text-anchor="middle">0</text><text x="72" y="593" font-family="Noto Sans KR" font-size="11" fill="#222222">로봇 적 (아래 글자: 안드로이드 / 엘리트 / 메크)</text><circle cx="47" cy="633" r="12" fill="#E0249A"/><text x="47" y="637" font-family="Noto Sans KR" font-size="10" font-weight="700" fill="#FFFFFF" text-anchor="middle">0</text><text x="72" y="637" font-family="Noto Sans KR" font-size="11" fill="#222222">크롤러 적</text><g font-family="Noto Sans KR" font-size="11" fill="#222222">
+<text x="35" y="697">적 아이콘 안에 적힌 숫자가 등장 웨이브의 숫자임</text>
+<text x="35" y="732">맵 이름 작성 규칙: 맵 이름 / 레벨 파일명</text>
+<text x="35" y="748">예시) 일반방01 / LV_Room_NormalRoom01</text>
+<text x="35" y="807">예상 동선 표시</text>
+<polygon  fill="#FF6B6B" points="135,832 127,828 127,836"/><line x1="35" y1="832" x2="135" y2="832" stroke="#FF6B6B" stroke-width="1.4"/><text x="150" y="836">(교전 시작 전)유저 예상 경로</text>
+<polygon  fill="#F2D43A" points="135,872 127,868 127,876"/><line x1="35" y1="872" x2="135" y2="872" stroke="#F2D43A" stroke-width="1.4"/><text x="150" y="876">(교전 시작 전)적 예상 경로</text>
+<circle cx="70" cy="917" r="14" fill="none" stroke="#F2D43A" stroke-width="1.6"/><text x="150" y="921">예상 교전지</text>
+<polygon  fill="#6B6BFF" points="135,962 127,958 127,966"/><line x1="35" y1="962" x2="135" y2="962" stroke="#6B6BFF" stroke-width="1.4"/><text x="150" y="966">(교전 종료 후)유저 예상 경로</text>
+<text x="35" y="1022">※ 2026-11-25 실제 배치(LV_Room_* 샘플) 기준. 좌표 1px = 4cm.</text>
+<text x="35" y="1038">※ 보스방(LV_Room_Boss, LV_Room_BigBossRoom)은 변경 없음.</text>
+</g>
+<g id="시작방 / LV_Room_Start">
+<text x="600" y="61" font-family="Noto Sans KR" font-size="19" fill="#222222">시작방 / LV_Room_Start</text>
+<polygon points="850.0,350.0 600.0,350.0 600.0,75.0 850.0,75.0" fill="none" stroke="#222222" stroke-width="1.3"/>
+<line x1="775.0" y1="75.0" x2="675.0" y2="75.0" stroke="#FF6B6B" stroke-width="13"/>
+<polyline points="725.0,212.5 725.0,80.0" fill="none" stroke="#6B6BFF" stroke-width="1.4"/>
+<polygon  fill="#6B6BFF" points="725.0,80.0 729.0,88.0 721.0,88.0"/>
+<text x="725.0" y="220.0" font-family="Noto Sans KR" font-size="11" fill="#222222" text-anchor="middle">중앙에서 플레이어블 캐릭터 생성</text>
+</g>
+<g id="일반 작은 방 1 / LV_Room_Small">
+<text x="920" y="61" font-family="Noto Sans KR" font-size="19" fill="#222222">일반 작은 방 1 / LV_Room_Small</text>
+<polygon points="1195.0,350.0 920.0,350.0 920.0,75.0 1195.0,75.0" fill="none" stroke="#222222" stroke-width="1.3"/>
+<rect x="1102.5" y="242.5" width="50.0" height="15.0" fill="#FFFFFF" stroke="#222222" stroke-width="1.2"/>
+<rect x="962.5" y="242.5" width="50.0" height="15.0" fill="#FFFFFF" stroke="#222222" stroke-width="1.2"/>
+<rect x="1047.5" y="190.0" width="20.0" height="20.0" fill="#DDDDDD" stroke="#222222" stroke-width="1.2"/>
+<rect x="1077.5" y="142.5" width="50.0" height="15.0" fill="#FFFFFF" stroke="#222222" stroke-width="1.2"/>
+<line x1="1107.5" y1="350.0" x2="1007.5" y2="350.0" stroke="#0A96FF" stroke-width="13"/>
+<line x1="1107.5" y1="75.0" x2="1007.5" y2="75.0" stroke="#FF6B6B" stroke-width="13"/>
+<ellipse cx="1057.5" cy="250.0" rx="95.0" ry="50.0" fill="none" stroke="#F2D43A" stroke-width="1.6"/>
+<polyline points="1057.5,345.0 1057.5,287.5" fill="none" stroke="#FF6B6B" stroke-width="1.4"/>
+<polygon  fill="#FF6B6B" points="1057.5,287.5 1061.5,295.5 1053.5,295.5"/>
+<polyline points="1087.5,230.0 1087.5,100.0 1067.5,80.0" fill="none" stroke="#6B6BFF" stroke-width="1.4"/>
+<polygon  fill="#6B6BFF" points="1067.5,80.0 1076.0,82.8 1070.3,88.5"/>
+<circle cx="1157.5" cy="162.5" r="11" fill="#6EEB8C"/>
+<text x="1157.5" y="166.0" font-family="Noto Sans KR" font-size="10" font-weight="700" fill="#FFFFFF" text-anchor="middle">1</text>
+<text x="1157.5" y="186.5" font-family="Noto Sans KR" font-size="9" fill="#2A8A45" text-anchor="middle">안드로이드</text>
+<circle cx="957.5" cy="162.5" r="11" fill="#6EEB8C"/>
+<text x="957.5" y="166.0" font-family="Noto Sans KR" font-size="10" font-weight="700" fill="#FFFFFF" text-anchor="middle">1</text>
+<text x="957.5" y="186.5" font-family="Noto Sans KR" font-size="9" fill="#2A8A45" text-anchor="middle">안드로이드</text>
+<circle cx="1057.5" cy="125.0" r="11" fill="#FF6B6B"/>
+<text x="1057.5" y="128.5" font-family="Noto Sans KR" font-size="10" font-weight="700" fill="#FFFFFF" text-anchor="middle">2</text>
+<circle cx="1132.5" cy="105.0" r="11" fill="#6EEB8C"/>
+<text x="1132.5" y="108.5" font-family="Noto Sans KR" font-size="10" font-weight="700" fill="#FFFFFF" text-anchor="middle">2</text>
+<text x="1132.5" y="129.0" font-family="Noto Sans KR" font-size="9" fill="#2A8A45" text-anchor="middle">안드로이드</text>
+</g>
+<g id="일반 넓은 방 1 / LV_Room_Wide">
+<text x="1265" y="61" font-family="Noto Sans KR" font-size="19" fill="#222222">일반 넓은 방 1 / LV_Room_Wide</text>
+<polygon points="1590.0,350.0 1265.0,350.0 1265.0,75.0 1590.0,75.0" fill="none" stroke="#222222" stroke-width="1.3"/>
+<rect x="1490.0" y="230.0" width="50.0" height="15.0" fill="#FFFFFF" stroke="#222222" stroke-width="1.2"/>
+<rect x="1315.0" y="230.0" width="50.0" height="15.0" fill="#FFFFFF" stroke="#222222" stroke-width="1.2"/>
+<rect x="1417.5" y="190.0" width="20.0" height="20.0" fill="#DDDDDD" stroke="#222222" stroke-width="1.2"/>
+<rect x="1355.0" y="160.0" width="20.0" height="20.0" fill="#DDDDDD" stroke="#222222" stroke-width="1.2"/>
+<rect x="1452.5" y="167.5" width="50.0" height="15.0" fill="#FFFFFF" stroke="#222222" stroke-width="1.2"/>
+<line x1="1477.5" y1="350.0" x2="1377.5" y2="350.0" stroke="#0A96FF" stroke-width="13"/>
+<line x1="1390.0" y1="75.0" x2="1290.0" y2="75.0" stroke="#FF6B6B" stroke-width="13"/>
+<ellipse cx="1427.5" cy="255.0" rx="105.0" ry="45.0" fill="none" stroke="#F2D43A" stroke-width="1.6"/>
+<polyline points="1427.5,345.0 1427.5,295.0" fill="none" stroke="#FF6B6B" stroke-width="1.4"/>
+<polygon  fill="#FF6B6B" points="1427.5,295.0 1431.5,303.0 1423.5,303.0"/>
+<polyline points="1552.5,102.5 1490.0,225.0" fill="none" stroke="#F2D43A" stroke-width="1.4"/>
+<polygon  fill="#F2D43A" points="1490.0,225.0 1490.1,216.1 1497.2,219.7"/>
+<polyline points="1302.5,102.5 1365.0,225.0" fill="none" stroke="#F2D43A" stroke-width="1.4"/>
+<polygon  fill="#F2D43A" points="1365.0,225.0 1357.8,219.7 1364.9,216.1"/>
+<polyline points="1427.5,100.0 1447.5,210.0" fill="none" stroke="#F2D43A" stroke-width="1.4"/>
+<polygon  fill="#F2D43A" points="1447.5,210.0 1442.1,202.8 1450.0,201.4"/>
+<polyline points="1407.5,210.0 1340.0,80.0" fill="none" stroke="#6B6BFF" stroke-width="1.4"/>
+<polygon  fill="#6B6BFF" points="1340.0,80.0 1347.2,85.3 1340.1,88.9"/>
+<circle cx="1540.0" cy="150.0" r="11" fill="#6EEB8C"/>
+<text x="1540.0" y="153.5" font-family="Noto Sans KR" font-size="10" font-weight="700" fill="#FFFFFF" text-anchor="middle">1</text>
+<text x="1540.0" y="174.0" font-family="Noto Sans KR" font-size="9" fill="#2A8A45" text-anchor="middle">안드로이드</text>
+<circle cx="1315.0" cy="137.5" r="11" fill="#6EEB8C"/>
+<text x="1315.0" y="141.0" font-family="Noto Sans KR" font-size="10" font-weight="700" fill="#FFFFFF" text-anchor="middle">1</text>
+<text x="1315.0" y="161.5" font-family="Noto Sans KR" font-size="9" fill="#2A8A45" text-anchor="middle">안드로이드</text>
+<circle cx="1427.5" cy="125.0" r="11" fill="#6EEB8C"/>
+<text x="1427.5" y="128.5" font-family="Noto Sans KR" font-size="10" font-weight="700" fill="#FFFFFF" text-anchor="middle">1</text>
+<text x="1427.5" y="149.0" font-family="Noto Sans KR" font-size="9" fill="#2A8A45" text-anchor="middle">엘리트</text>
+<circle cx="1552.5" cy="100.0" r="11" fill="#E0249A"/>
+<text x="1552.5" y="103.5" font-family="Noto Sans KR" font-size="10" font-weight="700" fill="#FFFFFF" text-anchor="middle">2</text>
+<circle cx="1302.5" cy="100.0" r="11" fill="#E0249A"/>
+<text x="1302.5" y="103.5" font-family="Noto Sans KR" font-size="10" font-weight="700" fill="#FFFFFF" text-anchor="middle">2</text>
+<circle cx="1427.5" cy="95.0" r="11" fill="#E0249A"/>
+<text x="1427.5" y="98.5" font-family="Noto Sans KR" font-size="10" font-weight="700" fill="#FFFFFF" text-anchor="middle">2</text>
+</g>
+<g id="일반 방 1 / LV_Room_R01">
+<text x="1665" y="61" font-family="Noto Sans KR" font-size="19" fill="#222222">일반 방 1 / LV_Room_R01</text>
+<polygon points="1940.0,347.5 1665.0,347.5 1665.0,75.0 1940.0,75.0" fill="none" stroke="#222222" stroke-width="1.3"/>
+<rect x="1741.2" y="186.2" width="12.5" height="112.5" fill="#FFFFFF" stroke="#222222" stroke-width="1.2"/>
+<rect x="1777.5" y="175.0" width="50.0" height="15.0" fill="#FFFFFF" stroke="#222222" stroke-width="1.2"/>
+<rect x="1867.5" y="180.0" width="20.0" height="20.0" fill="#DDDDDD" stroke="#222222" stroke-width="1.2"/>
+<rect x="1857.5" y="270.0" width="50.0" height="15.0" fill="#FFFFFF" stroke="#222222" stroke-width="1.2"/>
+<line x1="1852.5" y1="347.5" x2="1752.5" y2="347.5" stroke="#0A96FF" stroke-width="13"/>
+<line x1="1940.0" y1="262.5" x2="1940.0" y2="162.5" stroke="#FF6B6B" stroke-width="13"/>
+<ellipse cx="1795.0" cy="240.0" rx="75.0" ry="47.5" fill="none" stroke="#F2D43A" stroke-width="1.6"/>
+<polyline points="1802.5,342.5 1782.5,290.0" fill="none" stroke="#FF6B6B" stroke-width="1.4"/>
+<polygon  fill="#FF6B6B" points="1782.5,290.0 1789.1,296.1 1781.6,298.9"/>
+<polyline points="1802.5,116.2 1802.5,162.5" fill="none" stroke="#F2D43A" stroke-width="1.4"/>
+<polygon  fill="#F2D43A" points="1802.5,162.5 1798.5,154.5 1806.5,154.5"/>
+<polyline points="1865.0,106.2 1840.0,212.5" fill="none" stroke="#F2D43A" stroke-width="1.4"/>
+<polygon  fill="#F2D43A" points="1840.0,212.5 1837.9,203.8 1845.7,205.6"/>
+<polyline points="1740.0,106.2 1752.5,212.5" fill="none" stroke="#F2D43A" stroke-width="1.4"/>
+<polygon  fill="#F2D43A" points="1752.5,212.5 1747.6,205.0 1755.5,204.1"/>
+<polyline points="1852.5,232.5 1935.0,212.5" fill="none" stroke="#6B6BFF" stroke-width="1.4"/>
+<polygon  fill="#6B6BFF" points="1935.0,212.5 1928.2,218.3 1926.3,210.5"/>
+<circle cx="1902.5" cy="125.0" r="11" fill="#6EEB8C"/>
+<text x="1902.5" y="128.5" font-family="Noto Sans KR" font-size="10" font-weight="700" fill="#FFFFFF" text-anchor="middle">1</text>
+<text x="1902.5" y="149.0" font-family="Noto Sans KR" font-size="9" fill="#2A8A45" text-anchor="middle">안드로이드</text>
+<circle cx="1702.5" cy="125.0" r="11" fill="#6EEB8C"/>
+<text x="1702.5" y="128.5" font-family="Noto Sans KR" font-size="10" font-weight="700" fill="#FFFFFF" text-anchor="middle">1</text>
+<text x="1702.5" y="149.0" font-family="Noto Sans KR" font-size="9" fill="#2A8A45" text-anchor="middle">안드로이드</text>
+<circle cx="1802.5" cy="112.5" r="11" fill="#6EEB8C"/>
+<text x="1802.5" y="116.0" font-family="Noto Sans KR" font-size="10" font-weight="700" fill="#FFFFFF" text-anchor="middle">2</text>
+<text x="1802.5" y="136.5" font-family="Noto Sans KR" font-size="9" fill="#2A8A45" text-anchor="middle">메크</text>
+<circle cx="1865.0" cy="102.5" r="11" fill="#E0249A"/>
+<text x="1865.0" y="106.0" font-family="Noto Sans KR" font-size="10" font-weight="700" fill="#FFFFFF" text-anchor="middle">2</text>
+<circle cx="1740.0" cy="102.5" r="11" fill="#E0249A"/>
+<text x="1740.0" y="106.0" font-family="Noto Sans KR" font-size="10" font-weight="700" fill="#FFFFFF" text-anchor="middle">2</text>
+</g>
+<g id="일반 방 2 / LV_Room_R02">
+<text x="600" y="456" font-family="Noto Sans KR" font-size="19" fill="#222222">일반 방 2 / LV_Room_R02</text>
+<polygon points="872.5,795.0 600.0,795.0 600.0,470.0 872.5,470.0 872.5,595.0 1162.5,595.0 1162.5,695.0 872.5,695.0" fill="none" stroke="#222222" stroke-width="1.3"/>
+<rect x="775.0" y="667.5" width="50.0" height="15.0" fill="#FFFFFF" stroke="#222222" stroke-width="1.2"/>
+<rect x="662.5" y="680.0" width="50.0" height="15.0" fill="#FFFFFF" stroke="#222222" stroke-width="1.2"/>
+<rect x="727.5" y="577.5" width="20.0" height="20.0" fill="#DDDDDD" stroke="#222222" stroke-width="1.2"/>
+<rect x="637.5" y="555.0" width="50.0" height="15.0" fill="#FFFFFF" stroke="#222222" stroke-width="1.2"/>
+<line x1="787.5" y1="795.0" x2="687.5" y2="795.0" stroke="#0A96FF" stroke-width="13"/>
+<line x1="1012.5" y1="695.0" x2="1012.5" y2="595.0" stroke="#FF6B6B" stroke-width="13"/>
+<ellipse cx="737.5" cy="637.5" rx="67.5" ry="57.5" fill="none" stroke="#F2D43A" stroke-width="1.6"/>
+<polyline points="737.5,790.0 737.5,687.5" fill="none" stroke="#FF6B6B" stroke-width="1.4"/>
+<polygon  fill="#FF6B6B" points="737.5,687.5 741.5,695.5 733.5,695.5"/>
+<polyline points="641.2,632.5 700.0,640.0" fill="none" stroke="#F2D43A" stroke-width="1.4"/>
+<polygon  fill="#F2D43A" points="700.0,640.0 691.6,643.0 692.6,635.0"/>
+<polyline points="802.5,637.5 1007.5,645.0" fill="none" stroke="#6B6BFF" stroke-width="1.4"/>
+<polygon  fill="#6B6BFF" points="1007.5,645.0 999.4,648.7 999.7,640.7"/>
+<circle cx="812.5" cy="520.0" r="11" fill="#6EEB8C"/>
+<text x="812.5" y="523.5" font-family="Noto Sans KR" font-size="10" font-weight="700" fill="#FFFFFF" text-anchor="middle">1</text>
+<text x="812.5" y="544.0" font-family="Noto Sans KR" font-size="9" fill="#2A8A45" text-anchor="middle">안드로이드</text>
+<circle cx="662.5" cy="520.0" r="11" fill="#6EEB8C"/>
+<text x="662.5" y="523.5" font-family="Noto Sans KR" font-size="10" font-weight="700" fill="#FFFFFF" text-anchor="middle">1</text>
+<text x="662.5" y="544.0" font-family="Noto Sans KR" font-size="9" fill="#2A8A45" text-anchor="middle">안드로이드</text>
+<circle cx="637.5" cy="632.5" r="11" fill="#6EEB8C"/>
+<text x="637.5" y="636.0" font-family="Noto Sans KR" font-size="10" font-weight="700" fill="#FFFFFF" text-anchor="middle">2</text>
+<text x="637.5" y="656.5" font-family="Noto Sans KR" font-size="9" fill="#2A8A45" text-anchor="middle">메크</text>
+<circle cx="837.5" cy="625.0" r="11" fill="#FF6B6B"/>
+<text x="837.5" y="628.5" font-family="Noto Sans KR" font-size="10" font-weight="700" fill="#FFFFFF" text-anchor="middle">2</text>
+</g>
+<g id="큰 방 / LV_Room_Large">
+<text x="1435" y="456" font-family="Noto Sans KR" font-size="19" fill="#222222">큰 방 / LV_Room_Large</text>
+<polygon points="1935.0,870.0 1435.0,870.0 1435.0,470.0 1935.0,470.0" fill="none" stroke="#222222" stroke-width="1.3"/>
+<rect x="1772.5" y="700.0" width="50.0" height="15.0" fill="#FFFFFF" stroke="#222222" stroke-width="1.2"/>
+<rect x="1547.5" y="700.0" width="50.0" height="15.0" fill="#FFFFFF" stroke="#222222" stroke-width="1.2"/>
+<rect x="1660.0" y="575.0" width="50.0" height="15.0" fill="#FFFFFF" stroke="#222222" stroke-width="1.2"/>
+<rect x="1737.5" y="755.0" width="20.0" height="20.0" fill="#DDDDDD" stroke="#222222" stroke-width="1.2"/>
+<rect x="1612.5" y="755.0" width="20.0" height="20.0" fill="#DDDDDD" stroke="#222222" stroke-width="1.2"/>
+<rect x="1865.0" y="720.0" width="15.0" height="50.0" fill="#FFFFFF" stroke="#222222" stroke-width="1.2"/>
+<rect x="1490.0" y="720.0" width="15.0" height="50.0" fill="#FFFFFF" stroke="#222222" stroke-width="1.2"/>
+<line x1="1735.0" y1="870.0" x2="1635.0" y2="870.0" stroke="#0A96FF" stroke-width="13"/>
+<line x1="1885.0" y1="470.0" x2="1785.0" y2="470.0" stroke="#FF6B6B" stroke-width="13"/>
+<ellipse cx="1685.0" cy="695.0" rx="205.0" ry="72.5" fill="none" stroke="#F2D43A" stroke-width="1.6"/>
+<polyline points="1685.0,865.0 1685.0,795.0" fill="none" stroke="#FF6B6B" stroke-width="1.4"/>
+<polygon  fill="#FF6B6B" points="1685.0,795.0 1689.0,803.0 1681.0,803.0"/>
+<polyline points="1868.8,648.8 1805.0,680.0" fill="none" stroke="#F2D43A" stroke-width="1.4"/>
+<polygon  fill="#F2D43A" points="1805.0,680.0 1810.4,672.9 1813.9,680.1"/>
+<polyline points="1501.2,648.8 1565.0,680.0" fill="none" stroke="#F2D43A" stroke-width="1.4"/>
+<polygon  fill="#F2D43A" points="1565.0,680.0 1556.1,680.1 1559.6,672.9"/>
+<polyline points="1685.0,537.5 1685.0,575.0" fill="none" stroke="#F2D43A" stroke-width="1.4"/>
+<polygon  fill="#F2D43A" points="1685.0,575.0 1681.0,567.0 1689.0,567.0"/>
+<polyline points="1785.0,625.0 1835.0,475.0" fill="none" stroke="#6B6BFF" stroke-width="1.4"/>
+<polygon  fill="#6B6BFF" points="1835.0,475.0 1836.3,483.9 1828.7,481.3"/>
+<circle cx="1847.5" cy="557.5" r="11" fill="#FF6B6B"/>
+<text x="1847.5" y="561.0" font-family="Noto Sans KR" font-size="10" font-weight="700" fill="#FFFFFF" text-anchor="middle">1</text>
+<circle cx="1522.5" cy="557.5" r="11" fill="#FF6B6B"/>
+<text x="1522.5" y="561.0" font-family="Noto Sans KR" font-size="10" font-weight="700" fill="#FFFFFF" text-anchor="middle">1</text>
+<circle cx="1685.0" cy="620.0" r="11" fill="#6EEB8C"/>
+<text x="1685.0" y="623.5" font-family="Noto Sans KR" font-size="10" font-weight="700" fill="#FFFFFF" text-anchor="middle">1</text>
+<text x="1685.0" y="644.0" font-family="Noto Sans KR" font-size="9" fill="#2A8A45" text-anchor="middle">안드로이드</text>
+<circle cx="1685.0" cy="532.5" r="11" fill="#6EEB8C"/>
+<text x="1685.0" y="536.0" font-family="Noto Sans KR" font-size="10" font-weight="700" fill="#FFFFFF" text-anchor="middle">2</text>
+<text x="1685.0" y="556.5" font-family="Noto Sans KR" font-size="9" fill="#2A8A45" text-anchor="middle">메크</text>
+<circle cx="1872.5" cy="645.0" r="11" fill="#E0249A"/>
+<text x="1872.5" y="648.5" font-family="Noto Sans KR" font-size="10" font-weight="700" fill="#FFFFFF" text-anchor="middle">2</text>
+<circle cx="1497.5" cy="645.0" r="11" fill="#E0249A"/>
+<text x="1497.5" y="648.5" font-family="Noto Sans KR" font-size="10" font-weight="700" fill="#FFFFFF" text-anchor="middle">2</text>
+</g>
+<g id="미로 방 / LV_Room_Maze">
+<text x="600" y="1056" font-family="Noto Sans KR" font-size="19" fill="#222222">미로 방 / LV_Room_Maze</text>
+<polygon points="1287.5,1345.0 600.0,1345.0 600.0,1070.0 1287.5,1070.0" fill="none" stroke="#222222" stroke-width="1.3"/>
+<rect x="752.0" y="1245.0" width="536.0" height="10.0" fill="#FFFFFF" stroke="#222222" stroke-width="1.2"/>
+<rect x="592.0" y="1150.0" width="536.0" height="10.0" fill="#FFFFFF" stroke="#222222" stroke-width="1.2"/>
+<rect x="1093.8" y="1287.5" width="50.0" height="15.0" fill="#FFFFFF" stroke="#222222" stroke-width="1.2"/>
+<rect x="868.8" y="1195.0" width="50.0" height="15.0" fill="#FFFFFF" stroke="#222222" stroke-width="1.2"/>
+<rect x="668.8" y="1287.5" width="50.0" height="15.0" fill="#FFFFFF" stroke="#222222" stroke-width="1.2"/>
+<line x1="993.8" y1="1345.0" x2="893.8" y2="1345.0" stroke="#0A96FF" stroke-width="13"/>
+<line x1="993.8" y1="1070.0" x2="893.8" y2="1070.0" stroke="#FF6B6B" stroke-width="13"/>
+<ellipse cx="856.2" cy="1202.5" rx="82.5" ry="32.5" fill="none" stroke="#F2D43A" stroke-width="1.6"/>
+<text x="856.2" y="1184.6" font-family="Noto Sans KR" font-size="11" fill="#222222" text-anchor="middle">1차 교전</text>
+<ellipse cx="1156.2" cy="1115.0" rx="75.0" ry="30.0" fill="none" stroke="#F2D43A" stroke-width="1.6"/>
+<text x="1156.2" y="1098.5" font-family="Noto Sans KR" font-size="11" fill="#222222" text-anchor="middle">2차 교전</text>
+<polyline points="943.8,1340.0 718.8,1300.0 681.2,1215.0 818.8,1200.0" fill="none" stroke="#FF6B6B" stroke-width="1.4"/>
+<polygon  fill="#FF6B6B" points="818.8,1200.0 811.2,1204.8 810.4,1196.9"/>
+<polyline points="1215.0,1192.5 981.2,1205.0" fill="none" stroke="#F2D43A" stroke-width="1.4"/>
+<polygon  fill="#F2D43A" points="981.2,1205.0 989.0,1200.6 989.5,1208.6"/>
+<polyline points="767.5,1105.0 1206.2,1110.0 1206.2,1190.0 1093.8,1197.5" fill="none" stroke="#F2D43A" stroke-width="1.4"/>
+<polygon  fill="#F2D43A" points="1093.8,1197.5 1101.5,1193.0 1102.0,1201.0"/>
+<polyline points="956.2,1205.0 1193.8,1205.0 1206.2,1127.5" fill="none" stroke="#FF6B6B" stroke-width="1.4"/>
+<polygon  fill="#FF6B6B" points="1206.2,1127.5 1208.9,1136.0 1201.0,1134.8"/>
+<text x="1118.8" y="1190.0" font-family="Noto Sans KR" font-size="11" fill="#222222" text-anchor="middle">1차 교전 종료 후</text>
+<polyline points="635.0,1107.5 1138.8,1112.5" fill="none" stroke="#F2D43A" stroke-width="1.4"/>
+<polygon  fill="#F2D43A" points="1138.8,1112.5 1130.7,1116.4 1130.8,1108.4"/>
+<polyline points="1093.8,1105.0 981.2,1075.0" fill="none" stroke="#6B6BFF" stroke-width="1.4"/>
+<polygon  fill="#6B6BFF" points="981.2,1075.0 990.0,1073.2 987.9,1080.9"/>
+<circle cx="1218.8" cy="1192.5" r="11" fill="#E0249A"/>
+<text x="1218.8" y="1196.0" font-family="Noto Sans KR" font-size="10" font-weight="700" fill="#FFFFFF" text-anchor="middle">1</text>
+<circle cx="763.8" cy="1105.0" r="11" fill="#E0249A"/>
+<text x="763.8" y="1108.5" font-family="Noto Sans KR" font-size="10" font-weight="700" fill="#FFFFFF" text-anchor="middle">1</text>
+<circle cx="1018.8" cy="1202.5" r="11" fill="#6EEB8C"/>
+<text x="1018.8" y="1206.0" font-family="Noto Sans KR" font-size="10" font-weight="700" fill="#FFFFFF" text-anchor="middle">1</text>
+<text x="1018.8" y="1226.5" font-family="Noto Sans KR" font-size="9" fill="#2A8A45" text-anchor="middle">안드로이드</text>
+<circle cx="631.2" cy="1107.5" r="11" fill="#6EEB8C"/>
+<text x="631.2" y="1111.0" font-family="Noto Sans KR" font-size="10" font-weight="700" fill="#FFFFFF" text-anchor="middle">2</text>
+<text x="631.2" y="1131.5" font-family="Noto Sans KR" font-size="9" fill="#2A8A45" text-anchor="middle">메크</text>
+<circle cx="1218.8" cy="1115.0" r="11" fill="#E0249A"/>
+<text x="1218.8" y="1118.5" font-family="Noto Sans KR" font-size="10" font-weight="700" fill="#FFFFFF" text-anchor="middle">2</text>
+</g>
+</svg>

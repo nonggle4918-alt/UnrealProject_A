@@ -11,6 +11,25 @@
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
 #include "GameFramework/PlayerController.h"
+#include "Kismet/GameplayStatics.h"
+#include "TimerManager.h"
+
+namespace PAEvolutionUI
+{
+	/** 커서를 보이고 게임+UI 입력으로. 화면 클릭(마우스 캡처) 중에도 커서를 숨기지 않는다. */
+	static void EnsureCursor(APlayerController* PC)
+	{
+		if (!PC)
+		{
+			return;
+		}
+		FInputModeGameAndUI Mode;
+		Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+		Mode.SetHideCursorDuringCapture(false);
+		PC->SetInputMode(Mode);
+		PC->SetShowMouseCursor(true);
+	}
+}
 #include "PAProjectSettings.h"
 #include "UI/PAUIBuilder.h"
 #include "Weapon/PAGrowthWeaponComponent.h"
@@ -33,12 +52,32 @@ TSharedRef<SWidget> UPAEvolutionChoiceWidget::RebuildWidget()
 void UPAEvolutionChoiceWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
-	if (APlayerController* PC = GetOwningPlayer())
+	PAEvolutionUI::EnsureCursor(GetOwningPlayer());
+
+	// 방 클리어 때 증강 선택 창이 같이 뜨면, 그 창이 닫히면서(CloseShop) 커서를 끄고 GameOnly로 돌린다.
+	// 이 창이 화면에 남아 있는 동안 0.2초마다 커서를 다시 켠다. 창이 사라지면 타이머가 스스로 멈춘다.
+	// (타이머는 일시정지 중엔 멈추지만, 그동안은 증강 창이 커서를 켜 두므로 문제없다.)
+	if (UWorld* World = GetWorld())
 	{
-		FInputModeGameAndUI Mode;
-		Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
-		PC->SetInputMode(Mode);
-		PC->SetShowMouseCursor(true);
+		TSharedRef<FTimerHandle> Handle = MakeShared<FTimerHandle>();
+		TWeakObjectPtr<UPAEvolutionChoiceWidget> WeakThis(this);
+		TWeakObjectPtr<UWorld> WeakWorld(World);
+		World->GetTimerManager().SetTimer(*Handle, FTimerDelegate::CreateLambda([WeakThis, WeakWorld, Handle]()
+		{
+			if (!WeakThis.IsValid() || !WeakThis->IsInViewport())
+			{
+				if (UWorld* W = WeakWorld.Get())
+				{
+					W->GetTimerManager().ClearTimer(*Handle);
+				}
+				return;
+			}
+			APlayerController* PC = WeakThis->GetOwningPlayer();
+			if (PC && !PC->bShowMouseCursor)
+			{
+				PAEvolutionUI::EnsureCursor(PC);
+			}
+		}), 0.2f, true);
 	}
 }
 
@@ -98,7 +137,9 @@ void UPAEvolutionChoiceWidget::BuildTree()
 void UPAEvolutionChoiceWidget::Choose(FName FormId)
 {
 	// 입력 모드를 먼저 되돌린다: 연속 진화면 ChooseEvolution 안에서 새 창이 떠서 다시 UI 모드로 바꾼다.
-	if (APlayerController* PC = GetOwningPlayer())
+	// 증강 선택 창이 아직 떠 있으면(게임 일시정지 중) 그 창이 쓰는 커서·UI 모드를 건드리지 않는다.
+	APlayerController* PC = GetOwningPlayer();
+	if (PC && !UGameplayStatics::IsGamePaused(this))
 	{
 		PC->SetInputMode(FInputModeGameOnly());
 		PC->SetShowMouseCursor(false);
