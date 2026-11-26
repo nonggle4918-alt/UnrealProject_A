@@ -1,6 +1,7 @@
 # 인계: BP 연결 마무리 · 무기 피해 차등 · 로봇 적 AI 구현
 
-작성: 2026-11-24 / 브랜치 `feat/room-system` (**커밋 안 함**)
+작성: 2026-11-24 / 최종 갱신: 2026-11-26 (§7 방 샘플 엄폐물·웨이브 추가) / 커밋됨, `main`·`LKH`에 반영
+전체 상태와 다음 할 일은 `HANDOFF.md`가 기준.
 전제 문서: `인계_아웃게임_모듈_탄종_GAS.md`(C++ 구조), `기획_로봇적AI_설계.md`(설계), `인계_적AI_공통기반.md`(GOAP 구조)
 
 ## 한눈에 보기
@@ -15,7 +16,8 @@
 | 토큰(강한 공격 동시 제한) · 로봇 눈 LED | 완료 (C++ + BP) |
 | 빌드 | 성공 (마지막 빌드 2026-11-24) |
 | PIE 런타임 오류 | 없음 (시작만 확인) |
-| **실제 전투 동작 확인** | **안 함 — 직접 플레이 필요 (5절)** |
+| 엘리트 안드로이드 · 방 샘플 로봇 웨이브 · 엄폐물 | 완료 (11/25) — 7절 |
+| **실제 전투 동작 확인** | **안 함 — 직접 플레이 필요 (5절, 7절)** |
 
 ---
 
@@ -84,7 +86,7 @@
 | 메크 | `BP_Enemy_Mech` (기존) | `AIC_Enemy_Mech` (AIC_Enemy) **새로 지정** | Patrol, Idle, Investigate, Advance, ShootStanding(비용 3), Suppress(2), Stomp(1), VentCore, Reload | 속도 320, 지능 1, 사거리 1500, 탄 9. 목표에서 `safe` 뺌(회피 카드 없음) |
 | 크롤러 | `BP_Enemy_Crawler` (Melee) | `AIC_Enemy_Crawler` (AIC_Enemy) | Patrol, Idle, Investigate, SelfDestruct | 체력 40, 갑옷·실드 0, 속도 450(돌진 900), Tags Robot. 외형: 드론 메시(`SM_AerisUndeployed` ×2.2, BP 변수 `ProfileBodyMesh`/`ProfileBodyScale`) |
 
-- 스폰: `BP_EnemySpawnPoint.EnemyType`에 `Android`, `Crawler` 추가.
+- 스폰: `BP_EnemySpawnPoint.EnemyType`에 `Android`, `Crawler` 추가. (11/25 `AndroidElite` 추가 → 7절)
 - **MainLevel 테스트 배치 변경**: 스폰 C_4 Ranged → **Android**, C_3 Melee → **Crawler**. (C_2는 원래 Mech) — 원래대로 돌리려면 두 값을 되돌릴 것.
 
 ### 3-6. 설계 문서와 다른 점
@@ -125,7 +127,7 @@
 - 런타임 오류 확인: `Saved/Logs/UnrealProject_A.log`에서 `Blueprint Runtime Error`, `Script Msg` 검색
 
 ## 6. 남은 일
-1. 위 체크리스트 플레이 확인 → 수치 조정(크롤러 폭발 피해, 메크 제압 사격 발수).
+1. 위 체크리스트 + 7절 방 샘플 플레이 확인 → 수치 조정(크롤러 폭발 피해, 메크 제압 사격 발수, 방별 웨이브 수).
 2. 메크 메시에 `core` 소켓 → VentCore를 약점 배율 방식으로.
 3. 눈 LED·기계음 멀티캐스트(협동), 로봇 전용 사운드.
 4. ~~크롤러 전용 메시~~ (드론 메시로 완료) · ~~대기실 꾸미기~~ (완료) — 2026-11-24.
@@ -157,10 +159,20 @@
 | Maze (3) | 크롤러 미로 | 크롤러 2, 안드로이드 1 | 메크 1, 크롤러 1 |
 | Start · Boss · BigBossRoom | 변경 없음 | | |
 
-- 새로 추가한 스폰 포인트는 각 방 `BP_Room.SpawnPoints` 배열에 넣어 둠.
+- 새로 추가한 스폰 포인트는 각 방 `BP_Room.SpawnPoints` 배열에 넣어 둠. **스폰 포인트를 새로 놓으면 이 배열에 꼭 추가해야 스폰된다.**
+- 라벨 규칙: `SP_W{웨이브}_{번호}_{종류}` (R01·R02는 원래 이름을 살려 `Room_01_SP_W1_A_Android` 식).
+- 엄폐물 좌표(방 로컬 cm, L=낮은 벽 / P=기둥, 회전 0이면 긴 쪽이 X축):
+  - Small: L(−280,400) L(280,400) P(0,600) L(−180,800)
+  - R01: L(0,680) P(−300,650) L(−320,300) + 기존 testWall(x 195~245, y 215~665)
+  - R02: L(−250,500) L(200,450) P(0,850) L(300,950)
+  - Wide: L(−350,450) L(350,450) P(0,600) P(250,720) L(−200,700)
+  - Large: 기존 L(−450,650) L(450,650) L(0,1150) + P(−250,420) P(250,420) L(−750,500, 90°) L(750,500, 90°)
+  - Maze: L(−700,200) L(200,570) L(1000,200)
+- 평면도: `와이어프레임_방샘플.html` / `_figma.svg` (`HANDOFF.md` §5).
 
 ### 확인한 것 / 할 것
 - ✅ PIE(LV_Room_Wide 단독): 입장 → `[Room] Start` → Wave 1 → 안드로이드 2 + 엘리트(태그 `Elite`) 스폰, AI 사격.
 - ✅ PIE(MainLevel_Random): 방 6개 + 보스 방 배치, 런타임 오류 없음, 엄폐물 로드됨.
 - ⬜ 직접 플레이: 엄폐물 주변 내비 경로(메크가 끼지 않는지), 방당 전투 시간 30~60초, 크롤러 3마리 웨이브 난이도.
 - 참고: 샘플 레벨 단독 PIE에서는 NavMesh가 없어 Patrol이 실패한다(랜덤 맵에서는 정상).
+- 참고: Wide의 엘리트(0,900)는 기둥 P(0,600) 뒤라 입구 쪽 플레이어가 처음엔 안 보인다(의도한 엄폐). 엘리트 실드는 `Elite` 태그 → `PACombatProfileComponent` Rank=Elite로 생긴다.

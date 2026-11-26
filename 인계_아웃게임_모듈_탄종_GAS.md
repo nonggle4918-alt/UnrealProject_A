@@ -1,10 +1,10 @@
 # 인계: 아웃게임 루프 · 모듈(연산력) · 탄종/방어층 · 적 분류 · 성장형 총 (GAS C++)
 
-최종 갱신: 2026-11-24 / 브랜치 `feat/room-system` (원격에 푸시함)
+최종 갱신: 2026-11-26 / `main`·`LKH`에 반영 (원격 푸시됨). 전체 상태·다음 할 일은 `HANDOFF.md`가 기준.
 기획 내용은 `기획_아웃게임루프_모듈_탄종_초안.md`. 이 문서는 "코드가 어디 있고, 에디터에서 무엇을 연결해야 하는가".
 함께 볼 문서: `기획_로봇적AI_설계.md`(로봇 적 3종·새 행동 카드·방어층 이벤트 연결), `기획_경제시뮬레이션_가안.md`(수입·진화 시점·메타 진행 속도 계산).
 
-## 한눈에 보기 (2026-11-24 기준)
+## 한눈에 보기 (2026-11-26 기준)
 
 | 구분 | 상태 |
 |---|---|
@@ -15,45 +15,15 @@
 | 로봇 적 AI 구현 | **완료** — `인계_로봇적AI_구현.md` |
 | 결정 6개 (§8) | **확정** (기본값 유지, 2026-11-24) |
 | 콘텐츠·외형 (§4-6) | **완료, 커밋함** — 진화 외형, 스킬 이펙트, 패시브 4종, 크롤러·메크 코어, 대기실 장면 |
+| 진화 창 커서 버그 (§4-7) | 수정·빌드 (11/25), **플레이 확인 대기** |
 
 ---
 
 ## 0. 작업 컴퓨터에서 이어 하기
 
-### 0-1. 받기
-```
-cd <UnrealProject_A 폴더>
-git status                      # 미커밋 변경이 있으면 먼저 커밋하거나 stash
-git fetch origin
-git switch feat/room-system     # 처음이면 원격 브랜치를 따라 자동 생성된다
-git pull
-git lfs pull                    # 에셋 실물 받기
-```
-- 이번 작업은 `feat/room-system`에 커밋 1개로 올라가 있다(바탕 커밋 `a7e0295` 위).
-- `.uasset`은 하나도 안 바꿨다 — 코드(`Source/`), `UnrealProject_A.uproject`, 루트의 기획 문서만 바뀌었다. 그래서 다른 사람의 BP 작업과 충돌할 일이 없다.
-
-### 0-2. 빌드 (처음 한 번)
-- 작업 컴퓨터에도 **Visual Studio의 "C++를 사용한 게임 개발" + Windows SDK**가 있어야 한다(§1). 없으면 에디터가 "모듈을 다시 빌드하시겠습니까?"에서 실패한다.
-- 가장 쉬운 방법: `.uproject`를 더블클릭 → "다시 빌드" 예. 실패하면 §1의 `Build.bat` 명령으로 돌려 오류를 본다.
-- 엔진 경로가 `D:\UE_5.8`이 아니면 명령의 경로만 바꾼다.
-
-### 0-3. 그다음 순서
-1. §4 BP 연결 (플레이어 → 적 → 무기 → 방·런 흐름 순)
-2. §5 체크리스트로 PIE 확인
-3. `기획_로봇적AI_설계.md` 보고 로봇 적 카드 구현
-4. §8 미정 결정 정리 → 에디터 **프로젝트 설정 > Game > 프로젝트A 전투·성장**에서 수치 조정(저장하면 `Config/DefaultGame.ini`에 텍스트로 기록되어 병합 가능). 지금은 ini에 항목이 없고 전부 코드 기본값(`PAProjectSettings.cpp`)이다.
-
-### 0-4. 원래 개발 PC(집) 상태 — 참고
-- 그 PC의 원래 폴더(`Documents\Unreal Projects\UnrealProject_A`)는 `LKH` 브랜치이고, `Content/Room/BP_Room.uasset`에 **커밋 안 된 수정이 남아 있다**(손대지 않음).
-- 작업은 별도 폴더(git worktree) `Documents\Unreal Projects\UnrealProject_A_room`에서 했다. 이 폴더의 `.uasset`은 LFS 포인터뿐이라 **에디터로 열면 안 된다.**
-- 그 PC로 돌아가면 정리: 에디터를 닫고 원래 폴더에서
-  ```
-  git stash push -m "LKH BP_Room 작업중" Content/Room/BP_Room.uasset
-  git worktree remove ../UnrealProject_A_room
-  git switch feat/room-system && git pull
-  ```
-- 기존 stash 두 개(`!!GitHub_Desktop<origin/feat/room-system>`, `!!GitHub_Desktop<LKH>`)는 GitHub Desktop이 만든 것이고 손대지 않았다.
-- `Documents\Unreal Projects\UnrealProject_A_room_changes.patch`는 푸시 전 전달용으로 만든 것이라 이제 필요 없다.
+- 받기·빌드·Live Coding 주의사항은 `HANDOFF.md` §3에 정리했다. 요약: `git switch main && git pull && git lfs pull` → 에디터를 닫고 `Build.bat` (또는 `.uproject` 더블클릭 → 다시 빌드).
+- 예전에 이 절에 있던 "집 PC의 git worktree(`UnrealProject_A_room`)·stash·patch 정리" 안내는 끝났다(2026-11-26 확인: worktree·stash 없음). `feat/room-system` 작업은 `main`에 합쳐졌고, 새 작업은 `LKH` → `main`으로 간다.
+- 수치 조정은 에디터 **프로젝트 설정 > Game > 프로젝트A 전투·성장**(저장하면 `Config/DefaultGame.ini`에 텍스트로 기록 → 병합 가능). ini에 없는 항목은 `PAProjectSettings.cpp` 코드 기본값.
 
 ## 1. 빌드 환경
 
@@ -61,8 +31,10 @@ git lfs pull                    # 에셋 실물 받기
   `feat/room-system`은 이미 C++(GAS 기반)이 들어간 브랜치라 SDK·C++ 툴셋 없이는 **브랜치 자체를 열 수 없다**(에디터가 모듈 빌드를 요구하고 실패) — 팀원 PC도 같다.
 - Visual Studio Installer → 수정 → "C++를 사용한 게임 개발" + "Windows 11 SDK" 설치 후:
   ```
-  "D:\UE_5.8\Engine\Build\BatchFiles\Build.bat" UnrealProject_AEditor Win64 Development "-Project=<uproject 경로>" -WaitMutex -NoHotReloadFromIDE
+  "C:\Program Files\Epic Games\UE_5.8\Engine\Build\BatchFiles\Build.bat" UnrealProject_AEditor Win64 Development "-Project=<uproject 경로>" -WaitMutex -NoHotReloadFromIDE
   ```
+  - 엔진 경로는 PC마다 다르다(이 PC는 `C:\Program Files\Epic Games\UE_5.8`, 다른 PC는 `D:\UE_5.8`이었음).
+  - **이 프로젝트 에디터가 켜져 있으면 컴파일은 되지만 링크에서 실패**한다(DLL 잠김) → 에디터를 닫거나 Live Coding(Ctrl+Alt+F11). 헤더 변경은 Live Coding 금지. 자세히 `HANDOFF.md` §3-1.
   - `-NoHotReloadFromIDE`: 다른 프로젝트라도 언리얼 에디터가 떠 있으면 같은 `UnrealEditor.exe`를 쓰는 탓에 "Live Coding이 켜져 있어 빌드할 수 없다"로 막힌다. 이 플래그로 우회한다. 에디터를 다 끄면 필요 없다.
   - `Visual Studio compiler 14.52 is not a preferred version` 경고는 무시해도 된다(엔진이 아는 버전보다 새것일 뿐).
 - uproject에 `EnhancedInput` 플러그인을 명시적으로 추가했다(원래 기본 활성이라 동작은 같음).
@@ -169,11 +141,20 @@ git lfs pull                    # 에셋 실물 받기
 - **대기실 레벨 꾸미기**: `LV_Lobby`에 일본 골목 벽·바닥·소품·포스터·드론(아웃라이너 `Lobby` 폴더), 네온 점광원 3개(자홍·시안·주황), 해 질 녘 조명. 카메라 `Lobby_Camera`(Actor Tag `LobbyCamera`)를 `APALobbyGameMode::BeginPlay`가 시점으로 잡는다. 대기실 바탕(alpha 0.25)·패널(0.72)을 반투명으로 해서 장면이 비친다. World Settings GameMode Override = `PALobbyGameMode`(레벨에서 바로 PIE 가능).
 - 확인: 빌드 성공, 대기실·MainLevel PIE 런타임 오류 0. 대기실 화면은 캡처로 확인. **크롤러·메크 코어·진화 외형·스킬 이펙트는 전투에서 직접 봐야 함(아직 눈으로 확인 안 함).**
 
+### 4-7. 진화 선택 창 커서 수정 — **빌드 완료, 플레이 확인 대기 (2026-11-25)**
+- 증상: 진화 창이 떠도 마우스 커서가 없어 고를 수 없었다.
+- 원인: 방 클리어 → `AwardRoomClear` 경험치로 진화 창(`UPAEvolutionChoiceWidget`, Z 50)이 뜨는 순간 증강 선택 창(`BPC_PlayerAugments.OfferAugment` → `WBP_AugmentSelect`, Z 50, 일시정지 + UIOnly)도 뜬다. 증강을 고르면 `WBP_AugmentSelect.CloseShop`이 `SetInputMode_GameOnly` + `bShowMouseCursor=false`로 돌려, 남은 진화 창을 누를 수 없었다.
+- 수정 (`Private/UI/PAEvolutionChoiceWidget.cpp`만, 헤더 그대로 → Live Coding 가능했던 형태):
+  - `NativeConstruct`에서 0.2초 반복 타이머(람다, 약참조): 창이 뷰포트에 있고 커서가 꺼져 있으면 `PAEvolutionUI::EnsureCursor`(GameAndUI, 마우스 잠금 없음, `SetHideCursorDuringCapture(false)`, 커서 켬). 창이 사라지면 타이머가 스스로 멈춘다. 일시정지 중엔 타이머도 멈추지만 그동안은 증강 창이 커서를 켜 둔다.
+  - `Choose`: 게임이 일시정지(= 증강 창이 아직 열림)면 입력 모드·커서를 건드리지 않는다. 아니면 예전처럼 GameOnly + 커서 끔.
+- 확인할 것: `PA.GrowthXp 270`으로 진화 창 → 커서·클릭. 방 클리어로 두 창이 같이 뜰 때 "증강 먼저 → 진화"와 "진화 먼저 → 증강" 둘 다.
+- 다른 UI에서 같은 일이 생기면: 같은 방식으로 처리하거나, BP `CloseShop`이 다른 UI가 남아 있는지 보고 입력 모드를 되돌리게 바꾼다.
+
 ## 5. 테스트 체크리스트 (빌드 후)
 - [ ] 대기실: 세팅에서 칸 선택 → 모듈 장착/해제, 연산력 초과 시 버튼이 "연산력 부족"으로 잠김, 같은 모듈 두 칸 금지
 - [ ] 상점: 크레드 부족 시 구매 잠김, 연산력 확장 후 최대치 증가
 - [ ] 출진 → 적 처치 시 오른쪽 위 크레드 증가, 성장형 총 경험치 막대 증가
-- [ ] Lv4에서 진화 선택 창 → 고르면 HUD 형태 이름 변경
+- [ ] Lv4에서 진화 선택 창 → **커서가 보이고**, 고르면 HUD 형태 이름 변경 (방 클리어 때 증강 창과 같이 떠도)
 - [ ] V 근접, Q·E에 장착한 스킬(신경 가속·해킹·미사일·대시) — 쿨다운 표시
 - [ ] 대기실 세팅: 스킬 칸에 패시브가 안 보이고, 부위 칸에 스킬이 안 보임
 - [ ] 로봇(Mech)에 9mm vs 철갑탄 피해 차이, 엘리트 실드 재생
@@ -211,8 +192,8 @@ git lfs pull                    # 에셋 실물 받기
 | 6 | 협동 재화: 개인 vs 공유 | 개인(각 PC 로컬), 킬 보상은 호스트만 쌓임 | §7 |
 
 ## 9. 다음 작업 후보 (우선순위 순)
-1. §4 BP 연결 + §5 PIE 확인 — 이게 돼야 나머지 수치를 체감으로 잡을 수 있다.
+1. ~~§4 BP 연결~~ (완료) + §5 PIE 확인 — 이게 돼야 나머지 수치를 체감으로 잡을 수 있다.
 2. 실제 방당 적 수·엘리트 비율을 재서 `기획_경제시뮬레이션_가안.md`의 '보통 방' 가정 교체 → Lv7(2차 진화) 도달 공급량 재조정.
-3. 로봇 적 AI: `기획_로봇적AI_설계.md`의 새 월드 상태(`shieldDown`/`armorBroken`/`coreExposed`)를 `PACombatProfileComponent`의 `OnLayerBroken`/`OnShieldRestored`에 연결하고 카드(RechargeShield·Overdrive·Suppress·Advance·Stomp·VentCore) 구현.
+3. ~~로봇 적 AI~~ (완료 → `인계_로봇적AI_구현.md`): `기획_로봇적AI_설계.md`의 새 월드 상태(`shieldDown`/`armorBroken`/`coreExposed`)를 `PACombatProfileComponent`의 `OnLayerBroken`/`OnShieldRestored`에 연결하고 카드(RechargeShield·Overdrive·Suppress·Advance·Stomp·VentCore) 구현.
 4. ~~진화 외형·스킬 이펙트~~ (§4-6 완료). 남은 것: 형태별 발사음·반동, 스킬 1인칭 애니메이션.
 5. 신경 가속기 협동 대응(전역 시간 배율 → 개인 배율).

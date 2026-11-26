@@ -1,6 +1,12 @@
 # 인계: 적 AI (GOAP) + 플레이어 무기 + 방 시스템
 
-최종 갱신: 2026-11-20 (11/19 작업분 반영, 3-17. AI 관련은 이번 갱신에서 제외) / 다음 세션은 이 문서부터 읽고 시작
+최종 갱신: 2026-11-26 (§3-8 방 시스템에 랜덤 맵·적 종류·엄폐물 반영) / 처음 시작은 `HANDOFF.md`부터
+
+> **2026-11-26 메모 — 이 문서에서 바뀐 전제**
+> - "블루프린트 전용(C++ 없음)"은 11/22 이후 사실이 아니다. GAS C++ 모듈이 있다 → `인계_아웃게임_모듈_탄종_GAS.md`.
+> - 출진 레벨은 `MainLevel`이 아니라 랜덤 맵 `MainLevel_Random`이다(§3-8-2). `MainLevel`은 참고용으로 남겨 둠.
+> - 브랜치 `feat/room-system`은 `main`에 합쳐졌다. 지금 작업 흐름은 `LKH` → `main`.
+> - 로봇 적·토큰·눈 LED·방 샘플 웨이브는 `인계_로봇적AI_구현.md`.
 
 ---
 
@@ -10,7 +16,7 @@
 - **작업 방식(중요)**: 방식을 먼저 설명 → 사용자가 요청하면 MCP로 실행. 묻지 않은 변경은 하지 말 것.
 - **일정**: 11/18 실 구현, 11/19 테스트, 11/20 프로토타입 완성 (FPS 로그라이크).
 - **역할 메모**: 계획서상 몬스터 AI는 김현덕 담당, 사용자(이기현)는 레벨 디자인 + 언리얼 R&D. 이 AI 작업은 R&D로 진행함 → 팀 공유 시 이 문서를 기준으로.
-- 블루프린트 전용 프로젝트(C++ 없음), UE 5.8, 레벨 `/Game/Level/MainLevel`.
+- (11/20 기준) 블루프린트 전용 프로젝트였음, UE 5.8, 레벨 `/Game/Level/MainLevel`. → 지금은 C++ 모듈 + 랜덤 맵 `MainLevel_Random` (상단 메모).
 
 ---
 
@@ -24,7 +30,8 @@
 | 적 HP / 사망 래그돌 | 완료, 사망 확인 |
 | NavMesh 밖(초록 밖) 플레이어 대응 | 완료, 일부 검증 |
 | 플레이어 무기 (Shooter 템플릿) + 재장전 + 재장전 모션 | 완료, 확인 |
-| 방 시스템 (트리거 → 문 잠금 → 웨이브 스폰 → 클리어 → 문 열림) | 구현 완료. 입장·스폰 검증, 처치→클리어는 미검증 (3-8) |
+| 방 시스템 (트리거 → 문 잠금 → 웨이브 스폰 → 클리어 → 문 열림) | 완료. 처치→클리어→RUN CLEAR까지 사용자 플레이로 확인 (3-8, 3-9) |
+| 랜덤 맵 (방 샘플 레벨 이어 붙이기) | 완료, 일반 6 + 보스 1 (3-8-2) |
 | 보스 (황소 괴물, 카드 4종 + 분노 페이즈) | 구현 완료. 돌진·점프·연타·분노 PIE 확인, 돌진 빗나감·처치는 미검증 (3-9) |
 
 ### 2-1. 폴더 정리 (11/18, 백업 커밋 `dc0ceed` 이후)
@@ -196,7 +203,7 @@ AIPerception Senses: Sight(1500/2000, 60°), Hearing(2500), Damage, Touch. 모�
 
 ## 3-8. 방 시스템 (`/Game/Room`, 11/18)
 
-브랜치 `feat/room-system` (아직 커밋 없음). 결정: 방들을 한 레벨에 이어 붙이고 문으로 연결, **스폰은 미리 찍은 포인트에 고정 스폰**(NavMesh 범위 랜덤 아님).
+(11/18 작성, 지금은 `main`에 합쳐짐) 결정: 방들을 한 레벨에 이어 붙이고 문으로 연결, **스폰은 미리 찍은 포인트에 고정 스폰**(NavMesh 범위 랜덤 아님).
 
 ### 흐름
 
@@ -214,8 +221,8 @@ OnEnemyDied_Event: AliveCount−1 → 0이면 WaveDelay(1.5초) 뒤 StartNextWav
 
 | 에셋 | 역할 | 레벨에서 바꾸는 값 | Unity로 치면 |
 |---|---|---|---|
-| `BP_Room` | 방 관리자. `EntryTrigger`(Box 500×500×200) | `RoomName`, `SpawnPoints`(배열), `Doors`(배열), `WaveDelay`(1.5), `bFinalRoom` | RoomManager 스크립트 + 트리거 콜라이더 |
-| `BP_EnemySpawnPoint` | 고정 스폰 위치. 빨간 화살표 = 적이 바라볼 방향 | `EnemyType`(`Ranged`/`Melee`/`Random`, 오타면 Melee), `Wave`(1부터) | 스폰 포인트 빈 GameObject |
+| `BP_Room` | 방 관리자. `EntryTrigger`(Box 500×500×200) | `RoomName`, `SpawnPoints`(배열), `Doors`(배열), `WaveDelay`(1.5), `bFinalRoom`, `TriggerExtent`/`TriggerOffset`(11/23, 비우면 기본), `MissionChance`(거점 방어 미션 확률) | RoomManager 스크립트 + 트리거 콜라이더 |
+| `BP_EnemySpawnPoint` | 고정 스폰 위치. 빨간 화살표 = 적이 바라볼 방향 | `EnemyType`(아래 표, 오타면 Melee), `Wave`(1부터) | 스폰 포인트 빈 GameObject |
 | `BP_RoomDoor` | 문. 큐브 30cm×4m×3m, 열리면 바닥 아래로 내려감 | `OpenOffset`(0,0,−310), `MoveTime`(0.5), `bStartOpen`(true) | Lerp 코루틴 문 |
 | `BP_Enemy` (수정) | 디스패처 `OnEnemyDied(DeadEnemy)` 추가 (3-7) | — | `event Action<Enemy>` |
 
@@ -223,8 +230,21 @@ OnEnemyDied_Event: AliveCount−1 → 0이면 WaveDelay(1.5초) 뒤 StartNextWav
 - 스폰: 포인트 위치 +1m, `AdjustIfPossibleButAlwaysSpawn`. `Auto Possess AI`가 이미 Spawned 포함이라 AI 자동 연결됨.
 - 문은 `MoveComponentTo` 사용(Timeline 대신, 커브 에셋 불필요).
 - 적 종류를 이름(Name)으로 고르는 이유: MCP로 클래스 참조 변수를 만들 수 없음. 새 적 타입 추가 시 `BP_EnemySpawnPoint.SpawnEnemy`의 분기에 추가해야 함.
+- `EnemyType` 값 (2026-11-25 기준, `SpawnEnemy` 분기 순서):
 
-### MainLevel 테스트 배치 (아웃라이너 폴더 `Room_Test`)
+  | 값 | 스폰 클래스 |
+  |---|---|
+  | `Boss` | `/Game/Enemy/Boss/BP_Enemy_Boss` |
+  | `Mech` | `/Game/Enemy/BP_Enemy_Mech` |
+  | `AndroidElite` | `/Game/Enemy/BP_Enemy_Android_Elite` (11/25, Tags `Enemy, Robot, Elite`) |
+  | `Android` | `/Game/Enemy/BP_Enemy_Android` |
+  | `Crawler` | `/Game/Enemy/BP_Enemy_Crawler` |
+  | `Ranged` 또는 `Random`(50%) | `/Game/Enemy/BP_Enemy_Ranged` |
+  | 그 외 (`Melee`, `Random` 나머지 50%, 오타) | `/Game/Enemy/BP_Enemy_Melee` |
+
+- `SpawnEnemy` 이벤트는 11/25에 DSL로 다시 썼다(`Game|SpawnActorfromClass`, 위치 = 포인트 +100cm, 회전 = 포인트, `AdjustIfPossibleButAlwaysSpawn`). 분기 추가는 `HANDOFF.md` §3-3의 DSL 함정 참고.
+
+### MainLevel 테스트 배치 (아웃라이너 폴더 `Room_Test`) — 옛 고정 맵, 참고용
 
 | 방 | 위치(중심) | 웨이브 1 | 웨이브 2 | 문 |
 |---|---|---|---|---|
@@ -249,6 +269,15 @@ OnEnemyDied_Event: AliveCount−1 → 0이면 WaveDelay(1.5초) 뒤 StartNextWav
 - 조치(11/18): MainLevel `PlayerStart`에 태그 `BLUE`, `RED` 둘 다 추가하고 레벨 저장. (`Team Byte` 기본값 0이 어느 태그를 고르는지 그래프만으론 불확실해서 둘 다 붙임)
 - ✅ 확인(11/18, 사용자 직접 플레이): 사망 후 PlayerStart에서 다시 살아남.
 - 나중에 "사망 → 레벨 재시작"을 만들면 이 템플릿 리스폰 이벤트를 교체할 수 있음.
+
+### 3-8-2. 랜덤 맵 (`/Game/Room/MapGen`, 11/19~25)
+
+- `MainLevel_Random`의 `BP_MapGenerator`가 **시작방 → MiddlePool에서 섞은 6개 → 보스방**을 이전 방 출구에 다음 방 입구를 맞춰 `Load Level Instance`로 붙인다. 로드 전에 `PDA_RoomSample.BoundsMin/Max`로 겹침 검사, 겹치면 다시 섞음(MaxAttempts 50, OverlapTolerance 100). NavMesh는 동적 생성(NavMeshBoundsVolume을 넓게 깔아 둠).
+- 방 하나 = 샘플 레벨 하나(`/Game/Room/Samples/LV_Room_*`): 바닥·벽·문 2개·`BP_Room`·스폰 포인트·엄폐물·`BP_RoomConnector`(Entry/Exit) + 데이터 에셋 `DA_Room_*`.
+- 지금 풀: Start / Small, Wide, R01, R02, Large, Maze / BigBossRoom. 방별 웨이브·엄폐물은 `인계_로봇적AI_구현.md` §7, 평면도는 `와이어프레임_방샘플.html`.
+- 보스방 `LV_Room_BigBossRoom`: 1200cm 입구 복도 포함, 진입 트리거를 입구 안쪽으로 옮겨(`TriggerOffset`) 들어서자마자 보스 등장.
+- 새 방 추가 절차는 `HANDOFF.md` §4-2.
+- 확인(11/25 PIE): 방 6 + 보스 방 배치(시도 1회), 런타임 오류 없음, 엄폐물 로드됨. 샘플 단독 PIE(LV_Room_Wide)에서 웨이브 1 스폰·AI 사격 확인.
 
 ### MCP 작업 메모 (방 시스템에서 새로 알게 된 것)
 
